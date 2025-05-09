@@ -18,5 +18,5 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/EES-TUe/Dots-calculation-service-template"
-Issues = "https://github.com/EES-TUe/Dots-calculation-service-template/issues"
+Homepage = "https://github.com/dots-energy-services/dots-econnection-service"
+Issues = "https://github.com/dots-energy-services/dots-econnection-service/issues"
