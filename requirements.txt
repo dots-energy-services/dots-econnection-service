@@ -1,3 +1,4 @@
 helics==3.6.1
 dots_infrastructure==1.0.1
 Pyomo==6.7.0
+highspy==1.11.0

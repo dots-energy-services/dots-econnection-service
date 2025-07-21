@@ -82,7 +82,6 @@ class Test(unittest.TestCase):
                 edemand_param["buffer_temperature"] = 319.72477588114043
                 edemand_param["house_temperatures"] = [291.85009999999994, 288.3497627218783]
 
-
                 # Execute
                 ret_val = service.calculate_dispatch(edemand_param, datetime(2020,1,14), TimeStepInformation(24,24), test_param.esdl_id, energy_system)
 

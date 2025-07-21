@@ -1,12 +1,14 @@
+import re
 import esdl
 import pyomo.environ as pyo
 import numpy as np
-from pyomo.opt import SolverFactory
 from dots_infrastructure.Logger import LOGGER
-from pyomo.core.base.var import IndexedVar, ScalarVar
+from pyomo.core.base.var import ScalarVar
 from pyomo.core.base.param import IndexedParam, ScalarParam
-import json
-import copy
+import os
+import highspy
+
+from EConnectionService.esdl_entity_parameter_parser import EsdlEntityParameterParser
 
 
 class PortfolioOptimizationProblem:
@@ -17,29 +19,40 @@ class PortfolioOptimizationProblem:
     def create_time(self, time_params: dict):
         self.model.time_index_p = pyo.RangeSet(0, time_params['n_steps'] - 1)
         self.model.time_index_soc = pyo.RangeSet(0, time_params['n_steps'])
-        self.model.dt = pyo.Param(initialize=time_params['dt'])
+        self.model.dt = pyo.Param(initialize=time_params['dt'] / 3600)
         self.model.time_step_nr = pyo.Param(initialize=time_params['time_step_nr'])
+        self.highspy_interface = highspy.Highs()
+        self.solution : highspy.HighsSolution = None
 
     def create_electricity_demand(self, active_power: list):
         # Parameters
+        LOGGER.info("Creating electricity demand parameters")
         p_edemand_dict = self.it2dict(active_power)
         self.model.p_edemand = pyo.Param(self.model.time_index_p, within=pyo.Reals, initialize=p_edemand_dict)
 
     def create_ev_charging_station(self, ev_charging_station: esdl.EVChargingStation, state_of_charge: float):
         # change arrival/departure ptus based on current simulated time-step
         # e.g. we work in relative ptus from the current simulated ptu
-        ev_d = copy.deepcopy(json.loads(ev_charging_station.description))
+        ev_params = EsdlEntityParameterParser.get_ev_parameters(ev_charging_station)
         time_step_nr = pyo.value(self.model.time_step_nr)
-        arrival_ptus = [ptu - (time_step_nr - 1) for ptu in ev_d['arrival_ptus']]  # first simulated time step is 1
-        departure_ptus = [ptu - (time_step_nr - 1) for ptu in ev_d['departure_ptus']]
+        arrival_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
+        departure_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.departure_ptus]
+
+        # Correct for minor differences between the state of charge sent by ev charging station and the one in the model
+        if time_step_nr - 1 in arrival_ptus:
+            soc_index = arrival_ptus.index(time_step_nr - 1)
+            soc_upon_arrival = ev_params.arrival_socs_kwh[soc_index]
+            eps = 1.0e-3
+            if abs(soc_upon_arrival - state_of_charge) < eps:
+                state_of_charge = soc_upon_arrival
 
         # Parameters
         # Numbers
-        self.model.capacity_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_d['max_soc'])
+        self.model.capacity_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.max_soc_kwh)
         self.model.init_soc_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=state_of_charge)
 
-        self.model.ch_eff_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_d['efficiency'])
-        self.model.max_ch_rate_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_charging_station.power)
+        self.model.ch_eff_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.efficiency)
+        self.model.max_ch_rate_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.max_power_kw)
 
         # Arrays
         # Create availability list
@@ -80,7 +93,7 @@ class PortfolioOptimizationProblem:
         def arrival_constraint_f(model, t):
             if t in arrival_ptus:
                 session_nr = arrival_ptus.index(t)
-                arrival_soc = ev_d['arrival_socs'][session_nr]
+                arrival_soc = ev_params.arrival_socs_kwh[session_nr]
                 return model.soc_ev[t] == arrival_soc
             else:
                 return pyo.Constraint.Skip
@@ -90,7 +103,7 @@ class PortfolioOptimizationProblem:
         def departure_constraint_f(model, t):
             if t in departure_ptus:
                 session_nr = departure_ptus.index(t)
-                departure_soc = ev_d['departure_socs'][session_nr]
+                departure_soc = ev_params.departure_socs_kwh[session_nr]
                 return model.soc_ev[t] >= departure_soc
             else:
                 return pyo.Constraint.Skip
@@ -198,22 +211,22 @@ class PortfolioOptimizationProblem:
 
         # House
         # Create capacitance and conductance matrices
-        building = heat_pump.eContainer()
-        building_d = json.loads(building.description)
-        heat_pump_d = json.loads(heat_pump.description)
+        building_params = EsdlEntityParameterParser.get_building_parameters(heat_pump.eContainer())
+        heat_pump_params = EsdlEntityParameterParser.get_heatpump_parameters(heat_pump)
 
-        capacitance_matrix = np.diag(np.array([building_d['C_in'], building_d['C_out']]))
+        capacitance_matrix = np.diag(np.array([building_params.C_in_kwh, building_params.C_out_kwh]))
 
-        k_exch = 1.0 / building_d['R_exch']
-        k_floor = 1.0 / building_d['R_floor']
-        k_vent = 1.0 / building_d['R_vent']
-        k_cond = 1.0 / building_d['R_cond']
+        k_exch = 1.0 / building_params.R_exch
+        k_floor = 1.0 / building_params.R_floor
+        k_vent = 1.0 / building_params.R_vent
+        k_cond = 1.0 / building_params.R_cond
 
         conductance_matrix = np.array([[k_vent + k_exch + k_floor, -k_exch], [-k_exch, k_cond + k_exch]])
         conductance_matrix_amb = np.array([[k_vent, k_floor], [k_cond, 0]])
 
         # Convert L/s for dhw profile to power using the heat capacity of water and the temperature difference
-        dhw_heat_profile = np.array(dhw_profile) * 4183 * (heat_pump_d['dhw_temp_set'] - heat_pump_d['dhw_temp_tap'])
+        heat_capacity_water = 4183/3.6e6
+        dhw_heat_profile = np.array(dhw_profile) * heat_capacity_water * (heat_pump_params.dhw_temp_set - heat_pump_params.dhw_temp_tap)
         dhw_heat_profile_dict = self.it2dict(dhw_heat_profile)
 
         # Parameters
@@ -224,24 +237,24 @@ class PortfolioOptimizationProblem:
         self.model.C_house = pyo.Param(mat_index, mat_index, initialize=self.mat2dict(capacitance_matrix))
         self.model.K_house = pyo.Param(mat_index, mat_index, initialize=self.mat2dict(conductance_matrix))
         self.model.K_house_amb = pyo.Param(mat_index, mat_index, initialize=self.mat2dict(conductance_matrix_amb))
-        self.model.window_area = pyo.Param(initialize=building_d['A_glass'])
+        self.model.window_area = pyo.Param(initialize=building_params.A_glass)
 
         # Heat pump
-        self.model.Q_nom = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump.power)
+        self.model.Q_nom = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.power_kw)
         self.model.min_rel_heat = pyo.Param(within=pyo.NonNegativeReals, initialize=0.3)
-        self.model.C_dhw = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_d['dhw_capacitance'])
-        self.model.C_buffer = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_d['buffer_capacitance'])
-        self.model.T_dhw_min = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_d['dhw_temp_min'])
-        self.model.T_dhw_max = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_d['buffer_temp_max'])
-        self.model.T_dhw_hor = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_d['dhw_temp_hor'])
-        self.model.T_buffer_min = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_d['buffer_temp_min'])
-        self.model.T_buffer_max = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_d['buffer_temp_max'])
-        self.model.T_buffer_hor = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_d['buffer_temp_hor'])
-        self.model.T_house_min = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_d['house_temp_min'])
-        self.model.T_house_max = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_d['house_temp_max'])
-        self.model.T_house_hor = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_d['house_temp_hor'])
-        self.model.Q_element = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_d['heat_element'])
-        self.model.COP_element = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_d['cop_element'])
+        self.model.C_dhw = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.dhw_capacitance_kwh)
+        self.model.C_buffer = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.buffer_capacitance_kwh)
+        self.model.T_dhw_min = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.dhw_temp_min)
+        self.model.T_dhw_max = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.buffer_temp_max)
+        self.model.T_dhw_hor = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.dhw_temp_hor)
+        self.model.T_buffer_min = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.buffer_temp_min)
+        self.model.T_buffer_max = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.buffer_temp_max)
+        self.model.T_buffer_hor = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.buffer_temp_hor)
+        self.model.T_house_min = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.house_temp_min)
+        self.model.T_house_max = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.house_temp_max)
+        self.model.T_house_hor = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.house_temp_hor)
+        self.model.Q_element = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.heat_element_kw)
+        self.model.COP_element = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.cop_element)
 
         # Take simplified approach to cops
         self.model.COP_sh = pyo.Param(initialize=4.0, within=pyo.NonNegativeReals)  # [-]
@@ -430,16 +443,15 @@ class PortfolioOptimizationProblem:
 
         # House
         # Create capacitance and conductance matrices
-        building = hybrid_heat_pump.eContainer()
-        building_d = json.loads(building.description)
-        hybrid_heat_pump_d = json.loads(hybrid_heat_pump.description)
+        building_params = EsdlEntityParameterParser.get_building_parameters(hybrid_heat_pump.eContainer())
+        hybrid_heat_pump_params = EsdlEntityParameterParser.get_hybridheatpump_parameters(hybrid_heat_pump)
 
-        capacitance_matrix = np.diag(np.array([building_d['C_in'], building_d['C_out']]))
+        capacitance_matrix = np.diag(np.array([building_params.C_in_kwh, building_params.C_out_kwh]))
 
-        k_exch = 1.0 / building_d['R_exch']
-        k_floor = 1.0 / building_d['R_floor']
-        k_vent = 1.0 / building_d['R_vent']
-        k_cond = 1.0 / building_d['R_cond']
+        k_exch = 1.0 / building_params.R_exch
+        k_floor = 1.0 / building_params.R_floor
+        k_vent = 1.0 / building_params.R_vent
+        k_cond = 1.0 / building_params.R_cond
 
         conductance_matrix = np.array([[k_vent + k_exch + k_floor, -k_exch], [-k_exch, k_cond + k_exch]])
         conductance_matrix_amb = np.array([[k_vent, k_floor], [k_cond, 0]])
@@ -448,20 +460,20 @@ class PortfolioOptimizationProblem:
         self.model.C_house = pyo.Param(mat_index, mat_index, initialize=self.mat2dict(capacitance_matrix))
         self.model.K_house = pyo.Param(mat_index, mat_index, initialize=self.mat2dict(conductance_matrix))
         self.model.K_house_amb = pyo.Param(mat_index, mat_index, initialize=self.mat2dict(conductance_matrix_amb))
-        self.model.window_area = pyo.Param(initialize=building_d['A_glass'])
+        self.model.window_area = pyo.Param(initialize=building_params.A_glass)
 
         # Heat pump
-        self.model.Q_nom = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump.heatPumpThermalPower)
+        self.model.Q_nom = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_params.heat_thermal_power_kw)
         self.model.min_rel_heat = pyo.Param(within=pyo.NonNegativeReals, initialize=0.3)
-        self.model.C_buffer = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_d['buffer_capacitance'])
-        self.model.T_buffer_min = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_d['buffer_temp_min'])
-        self.model.T_buffer_max = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_d['buffer_temp_max'])
-        self.model.T_buffer_hor = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_d['buffer_temp_hor'])
-        self.model.T_house_min = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_d['house_temp_min'])
-        self.model.T_house_max = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_d['house_temp_max'])
-        self.model.T_house_hor = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_d['house_temp_hor'])
+        self.model.C_buffer = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_params.buffer_capacitance_kwh)
+        self.model.T_buffer_min = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_params.buffer_temp_min)
+        self.model.T_buffer_max = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_params.buffer_temp_max)
+        self.model.T_buffer_hor = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_params.buffer_temp_hor)
+        self.model.T_house_min = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_params.house_temp_min)
+        self.model.T_house_max = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_params.house_temp_max)
+        self.model.T_house_hor = pyo.Param(within=pyo.NonNegativeReals, initialize=hybrid_heat_pump_params.house_temp_hor)
 
-        cops = [self.calculate_cop(hybrid_heat_pump_d['buffer_temp_set'], T_air) for T_air in air_temperature]
+        cops = [self.calculate_cop(hybrid_heat_pump_params.buffer_temp_set, T_air) for T_air in air_temperature]
         self.model.cop = pyo.Param(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=self.it2dict(cops))
 
         # initial values from input
@@ -574,7 +586,7 @@ class PortfolioOptimizationProblem:
         self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
 
-        capacity = 17.0e3  # TODO: remove magic number
+        capacity = 17.0  # TODO: remove magic number
         self.model.con_energy_buy_ub = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
             m.e_buy[t] <= m.z_buy[t] * capacity * m.dt
@@ -615,22 +627,30 @@ class PortfolioOptimizationProblem:
         self.model.con_energy_sell = pyo.Constraint(self.model.time_index_p, rule=con_energy_sell_f)
 
     def get_first_value_from_component(self, name: str):
-        # component is either an IndexedVar or IndexedParam
+        column = self.highspy_interface.getColByName(f"{name}(0)")
+        return self.solution.col_value[column[1]]
+    
+    def get_model_parameter_value(self, name: str):
         component = self.model.find_component(name)
-        if isinstance(component, IndexedVar):
-            return next(iter(component.values()))()
-        elif isinstance(component, IndexedParam):
-            return next(iter(component.values()))
+        if isinstance(component, IndexedParam):
+            value_to_return = next(iter(component.values()))
+            LOGGER.info(f"Parameter {name} from model has value: {value_to_return}")
+            return pyo.value(value_to_return)
+        else:
+            raise TypeError(f'Component {name} should be IndexedVar or IndexedParam')
+        
+    def get_model_scalar_value(self, name: str):
+        component = self.model.find_component(name)
+        if isinstance(component, ScalarVar) or isinstance(component, ScalarParam):
+            value_to_return = pyo.value(component)
+            LOGGER.info(f"Scalar {name} from model has value: {value_to_return}")
+            return value_to_return
         else:
             raise TypeError(f'Component {name} should be IndexedVar or IndexedParam')
 
     def get_value_from_component(self, name: str):
-        # component is either an ScalarVar or ScalarParam
-        component = self.model.find_component(name)
-        if isinstance(component, ScalarVar) or isinstance(component, ScalarParam):
-            return pyo.value(component)
-        else:
-            raise TypeError(f'Component {name} should be IndexedVar or IndexedParam')
+        column = self.highspy_interface.getColByName(f"{name}")
+        return self.solution.col_value[column[1]]
 
     def create_objective_function(self, is_grid_tariff: bool):
         def total_costs(m):
@@ -680,7 +700,7 @@ class PortfolioOptimizationProblem:
 
         # Convert e_buy from J to kWh to match the price unit Eur/kWh
         self.model.sell_rev_def = pyo.Constraint(
-            rule=lambda m: m.sell_rev == sum(sell_prices[t] * m.e_sell[t] / 3.6e6 for t in m.time_index_p))
+            rule=lambda m: m.sell_rev == sum(sell_prices[t] * m.e_sell[t] for t in m.time_index_p))
 
     def create_buy_costs(self,
                          energy_contract: str,
@@ -702,23 +722,30 @@ class PortfolioOptimizationProblem:
 
         # Convert e_buy from J to kWh to match the price unit Eur/kWh
         self.model.buy_costs_def = pyo.Constraint(
-            rule=lambda m: m.buy_costs == sum(buy_prices[t] * m.e_buy[t] / 3.6e6 for t in m.time_index_p))
+            rule=lambda m: m.buy_costs == sum(buy_prices[t] * m.e_buy[t] for t in m.time_index_p))
+
 
     def solve(self, mip_gap, show_logs=False):
-        # Use open-source highs solver, installed in the highspy package (see requirements)
-        # There are some issues with how pyomo handles the logging from the highs solver
-        # This issue is related to: https://github.com/Pyomo/pyomo/issues/3031
-        # For this reason, the show_logs is set to False in this example
-        opt = SolverFactory('glpk')
-        opt.options['mipgap'] = mip_gap
-        # opt.log_stream = None
-        # opt.keepfiles = True
-        # opt.log_stream = open("highs_output.log", "w")
-        status = opt.solve(self.model, tee=show_logs)
+        filename = 'model.mps'
+        self.model.write('model.mps', io_options={'symbolic_solver_labels': True})
+        self.highspy_interface.setOptionValue('mip_rel_gap', mip_gap)
+        self.highspy_interface.setOptionValue('presolve', 'on')
+        self.highspy_interface.setOptionValue('log_to_console', show_logs)
+        self.highspy_interface.readModel(filename)
 
-        LOGGER.info(f"Status = {status.solver.termination_condition}")
-        assert status.solver.termination_condition != 'infeasible', "solution status infeasible"
-        assert status.solver.termination_condition != 'infeasibleOrUnbounded', "solution status infeasible or unbounded"
+        LOGGER.info(self.highspy_interface.getConstrs()[0])
+
+        self.highspy_interface.run()
+        model_status = self.highspy_interface.getModelStatus()
+
+        if not (self.highspy_interface.modelStatusToString(model_status) == "Optimal" or self.highspy_interface.modelStatusToString(model_status) == "Solve error"):
+            LOGGER.error(f"Status = {self.highspy_interface.modelStatusToString(model_status)}")
+            raise ValueError(f"Status = {self.highspy_interface.modelStatusToString(model_status)}")
+        else:
+            self.solution = self.highspy_interface.getSolution()
+
+        os.remove(filename)
+
 
     def create_static_bw_tariff(self,
                                 static_bw_price_low: float,
@@ -735,12 +762,12 @@ class PortfolioOptimizationProblem:
         self.model.con_bw_low = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
             # eur/kWh x kWh
-            m.static_bw_price_high * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt)/3.6e6 <= m.static_bw_costs[t])
+            m.static_bw_price_high * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
         self.model.con_bw_high = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
             # eur/kWh x kWh
-            m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt)/3.6e6 <= m.static_bw_costs[t])
+            m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
         self.model.con_grid_costs = pyo.Constraint(rule=lambda m: m.grid_costs == sum(m.static_bw_costs[t] for t in m.time_index_p))
 
@@ -756,12 +783,12 @@ class PortfolioOptimizationProblem:
         self.model.con_bw_low = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
             # eur/kWh x kWh
-            m.static_bw_price_high * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt)/3.6e6 <= m.static_bw_costs[t])
+            m.static_bw_price_high * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
         self.model.con_bw_high = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
             # eur/kWh x kWh
-            m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt)/3.6e6 <= m.static_bw_costs[t])
+            m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
     def create_variable_tariff(self, variable_tariff: list):
         variable_tariff_dict = self.it2dict(variable_tariff)
@@ -771,7 +798,7 @@ class PortfolioOptimizationProblem:
         self.model.grid_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
 
         self.model.con_grid_costs = pyo.Constraint(
-            rule=lambda m: m.grid_costs == sum(m.variable_tariff[t] * (m.e_buy[t] + m.e_sell[t])/3.6e6
+            rule=lambda m: m.grid_costs == sum(m.variable_tariff[t] * (m.e_buy[t] + m.e_sell[t])
                                                for t in m.time_index_p))
 
     def create_variable_peak_tariff(self,
@@ -829,10 +856,15 @@ class PortfolioOptimizationProblem:
         """
 
         T = np.array(house_temperatures)
-        heat_pump_d = json.loads(heat_pump.description)
+        heat_pump_params = None
+        if isinstance(heat_pump, esdl.HeatPump):
+            heat_pump_params = EsdlEntityParameterParser.get_heatpump_parameters(heat_pump)
+        elif isinstance(heat_pump, esdl.HybridHeatPump):
+            heat_pump_params = EsdlEntityParameterParser.get_hybridheatpump_parameters(heat_pump)
+
         dt = pyo.value(self.model.dt)
 
-        if T[0] > heat_pump_d['house_temp_max']:
+        if T[0] > heat_pump_params.house_temp_max:
             return True
         for t in range(len(self.model.time_index_p)):
             # calculate right hand side (rhs) of the differential equation.
@@ -841,9 +873,9 @@ class PortfolioOptimizationProblem:
                    np.matmul(conductance_matrix_amb, T_amb) +
                    np.array([pyo.value(self.model.window_area) * solar_irradiance[t]]))
             T += dt * np.matmul(np.diag(1.0/np.diag(capacitance_matrix)), rhs)
-            if T[0] < heat_pump_d['house_temp_min']:
-                T[0] = heat_pump_d['house_temp_min']
-            if T[0] > heat_pump_d['house_temp_max']:
+            if T[0] < heat_pump_params.house_temp_min:
+                T[0] = heat_pump_params.house_temp_min
+            if T[0] > heat_pump_params.house_temp_max:
                 return True
         return False
 
