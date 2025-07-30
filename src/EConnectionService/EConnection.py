@@ -313,11 +313,6 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             potential_active_power = get_single_param_with_name(param_dict, "potential_active_power")
             potential_active_power = [round(p, self.round_decimals) for p in potential_active_power]
             problem.create_pv(potential_active_power)
-        if 'Battery' in asset_portfolio:
-            battery = asset_portfolio['Battery']['esd_object']
-            state_of_charge = param_dict['energy']
-            state_of_charge = round(state_of_charge, self.round_decimals)
-            problem.create_battery(battery, state_of_charge)
         if ('HeatPump' in asset_portfolio) or ('HybridHeatPump' in asset_portfolio):
             # Weather inputs
             air_temperature = get_single_param_with_name(param_dict, "air_temperature")
@@ -451,17 +446,6 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             ret_val['dispatch_pv'] = p_pv
 
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'PVInstallation', p_pv)
-            aggregated_active_power += p
-            aggregated_reactive_power += q
-
-        if 'Battery' in asset_portfolio:
-            p_ch_w = problem.get_first_value_from_component('p_ch') * 1000
-            p_bat_use_w = problem.get_first_value_from_component('p_bat_use') * 1000
-            p_bat_sell_w = problem.get_first_value_from_component('p_bat_sell') * 1000
-            p_battery = asset_portfolio['Battery'].chargeEfficiency * p_ch_w - asset_portfolio['Battery'].dischargeEfficiency * (p_bat_use_w - p_bat_sell_w)
-            ret_val['dispatch_battery'] = p_battery
-
-            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'Battery', p_battery)
             aggregated_active_power += p
             aggregated_reactive_power += q
 
