@@ -28,10 +28,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install build
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Install glpk
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y glpk-utils
     - name: Install
       run: |
         pip install -e ./
