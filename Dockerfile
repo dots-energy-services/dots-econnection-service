@@ -8,10 +8,6 @@ COPY pyproject.toml ./
 COPY README.md ./
 COPY requirements.txt ./
 
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update \
-&& apt-get install -y glpk-utils \
-&& apt-get clean
-RUN pip install -r requirements.txt
-RUN pip install ./
+RUN pip install -r requirements.txt && \
+    pip install ./
 ENTRYPOINT ["python3", "src/EConnectionService/EConnection.py"]

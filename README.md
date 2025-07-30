@@ -1,13 +1,16 @@
 
 # Calculation service for esdl_type EConnection:
 
-This calculation service calculates the cost-optimal dispatch of a portfolio of assets within a house. It uses a moving-horizon optimization of some limited horizon (e.g. 12 hours). It assumes perfect knowledge of parameters within the optimization horizon. The costs for the house are the sum of the energy costs, which depend on whether the household has a static of dynamic energy contract, and the grid tariff. The flexible assets implemented are photovoltaics, electric vehicles, home batteries, heat pumps and hybrid heat pumps. For more details on the modeling of the energy management system, the paper: On synergies between congestion management instruments: The Dutch case-study, which should be publicly available
+This calculation service calculates the cost-optimal dispatch of a portfolio of assets within a house. It uses a moving-horizon optimization of some limited horizon (e.g. 12 hours). It assumes perfect knowledge of parameters within the optimization horizon. The costs for the house are the sum of the energy costs, which depend on whether the household has a static of dynamic energy contract, and the grid tariff. The flexible assets implemented are photovoltaics, electric vehicles, home batteries, heat pumps and hybrid heat pumps. For more details on the modeling of the energy management system, the paper: On synergies between congestion management instruments: The Dutch case-study, which should be publicly available.
+
+## The optimization problem
+An important thing to note is that all the inputs are converted to kW's and kWh's before they are being used in the optimization problem. This holds for inputs coming from the ESDL as wel as inputs from other calculation services. Once the optimization problem is solved the outputs are converted back to watts and joules. The conversion is done to improve the solver's performance.
 
 ## Calculations
 
 ### calculate_dispatch 
 
-Calculate the dispatch of of all assets in the portfolio. It does so by 1) Create a portfolio optimization problem (single phase), 2) Solves the optimization model for the dispatch of the assets, 3)read the return values from the model, and 4) compute the (3 phase unbalanced) dispatch for the assets and the aggregate
+Calculate the dispatch of of all assets in the portfolio. It does so by 1) Create a portfolio optimization problem (single phase), 2) Solves the optimization model for the dispatch of the assets, 3)read the return values from the model, and 4) compute the (3 phase unbalanced) dispatch for the assets and the aggregated load on the three phases.
 #### Input parameters
 |Name            |esdl_type            |data_type            |unit            |description            |
 |----------------|---------------------|---------------------|----------------|-----------------------|

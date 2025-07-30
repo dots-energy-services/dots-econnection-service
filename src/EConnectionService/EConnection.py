@@ -9,6 +9,7 @@ from esdl import esdl, EnergySystem
 import json
 import numpy as np
 from typing import Optional, List
+from EConnectionService.esdl_entity_parameter_parser import EsdlEntityParameterParser
 from EConnectionService.portfolio_optimization import PortfolioOptimizationProblem
 from dots_infrastructure.CalculationServiceHelperFunctions import get_single_param_with_name
 
@@ -171,6 +172,28 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         self.set_initial_da_prices(energy_system)
         self.set_tariff_data(energy_system)
 
+    def get_correct_scalar(self, param_key : str, scalars : dict):
+        for key, value in scalars.items():
+            if key in param_key:
+                return value
+        return 1
+
+    def apply_scaling_to_input_params_calculate_dispatch(self, param_dict : dict):
+        scalars = {
+            "solar_irradiance" : 0.001,
+            "active_power" : 0.001,
+            "reactive_power" : 0.001,
+            "potential_active_power" : 0.001,
+            "state_of_charge_ev" : 1 / 3.6e6
+        }
+        ret_val = {}
+        for key, value in param_dict.items():
+            if isinstance(value, list):
+                ret_val[key] = [v * self.get_correct_scalar(key, scalars) for v in value]
+            else:
+                ret_val[key] = value * self.get_correct_scalar(key, scalars)
+        return ret_val
+
     def get_asset_portfolio_from_econnection(self, econnection: esdl.EConnection) -> dict:
         """
         Get the esdl objects and their phases in the house of the econnection
@@ -229,16 +252,17 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         - read the return values from the model
         - compute the (3 phase unbalanced) dispatch
         """
-        LOGGER.info("calculation 'calculate_dispatch' started")
+        scaled_param_dict = self.apply_scaling_to_input_params_calculate_dispatch(param_dict)
+
         # START user calc
 
         # Create problem if there is an EMS
         # If not: set load to the baseload and set all dispatch to 0
         if self.got_ems[esdl_id]:
-            problem = self.create_portfolio_optimization_problem(param_dict, time_step_number, esdl_id)
+            problem = self.create_portfolio_optimization_problem(scaled_param_dict, time_step_number, esdl_id)
 
             # Solve problem
-            problem.solve(mip_gap=0.15)  # mip_gap=0.07
+            problem.solve(mip_gap=0.001)  # mip_gap=0.07
             LOGGER.info("Optimization problem solved")
 
             # Get peak tariff if necessary
@@ -289,11 +313,6 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             potential_active_power = get_single_param_with_name(param_dict, "potential_active_power")
             potential_active_power = [round(p, self.round_decimals) for p in potential_active_power]
             problem.create_pv(potential_active_power)
-        if 'Battery' in asset_portfolio:
-            battery = asset_portfolio['Battery']['esd_object']
-            state_of_charge = param_dict['energy']
-            state_of_charge = round(state_of_charge, self.round_decimals)
-            problem.create_battery(battery, state_of_charge)
         if ('HeatPump' in asset_portfolio) or ('HybridHeatPump' in asset_portfolio):
             # Weather inputs
             air_temperature = get_single_param_with_name(param_dict, "air_temperature")
@@ -415,59 +434,48 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         if 'ElectricityDemand' in asset_portfolio:
             # Only grab the first value. The other values in the horizon don't matter
-            p_edemand = problem.get_first_value_from_component('p_edemand')
-            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'ElectricityDemand', p_edemand)
+            p_edemand_w = problem.get_model_parameter_value('p_edemand') * 1000
+            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'ElectricityDemand', p_edemand_w)
             aggregated_active_power += p
             aggregated_reactive_power += q
 
         if 'PVInstallation' in asset_portfolio:
-            p_use = - problem.get_first_value_from_component('p_pv_use')
-            p_sell = - problem.get_first_value_from_component('p_pv_sell')
-            p_pv = p_use + p_sell
+            p_use_w = - problem.get_first_value_from_component('p_pv_use') * 1000
+            p_sell_w = - problem.get_first_value_from_component('p_pv_sell') * 1000
+            p_pv = p_use_w + p_sell_w
             ret_val['dispatch_pv'] = p_pv
 
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'PVInstallation', p_pv)
             aggregated_active_power += p
             aggregated_reactive_power += q
 
-        if 'Battery' in asset_portfolio:
-            p_ch = problem.get_first_value_from_component('p_ch')
-            p_bat_use = problem.get_first_value_from_component('p_bat_use')
-            p_bat_sell = problem.get_first_value_from_component('p_bat_sell')
-            p_battery = asset_portfolio['Battery'].chargeEfficiency * p_ch - asset_portfolio['Battery'].dischargeEfficiency * (p_bat_use - p_bat_sell)
-            ret_val['dispatch_battery'] = p_battery
-
-            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'Battery', p_battery)
-            aggregated_active_power += p
-            aggregated_reactive_power += q
-
         if 'HeatPump' in asset_portfolio:
-            p_hp = problem.get_first_value_from_component('p_hp')
-            ret_val["heat_power_to_tank_dhw"] = problem.get_first_value_from_component('Q_to_dhw_tank')
-            heat_element = problem.get_first_value_from_component('z_element_on') * problem.get_value_from_component('Q_element')
+            p_hp_w = problem.get_first_value_from_component('p_hp') * 1000
+            ret_val["heat_power_to_tank_dhw"] = problem.get_first_value_from_component('Q_to_dhw_tank') * 1000
+            heat_element = problem.get_first_value_from_component('z_element_on') * problem.get_model_scalar_value('Q_element') * 1000
             ret_val["heat_power_to_tank_dhw"] += heat_element
-            ret_val["heat_power_to_buffer"] = problem.get_first_value_from_component('Q_to_buffer')
-            ret_val["heat_power_to_dhw"] = problem.get_first_value_from_component('Q_to_dhw')
-            ret_val["heat_power_to_house"] = problem.get_first_value_from_component('Q_to_house')
+            ret_val["heat_power_to_buffer"] = problem.get_first_value_from_component('Q_to_buffer') * 1000
+            ret_val["heat_power_to_dhw"] = problem.get_model_parameter_value('Q_to_dhw') * 1000
+            ret_val["heat_power_to_house"] = problem.get_first_value_from_component('Q_to_house') * 1000
 
-            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'HeatPump', p_hp)
+            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'HeatPump', p_hp_w)
             aggregated_active_power += p
             aggregated_reactive_power += q
 
         if 'HybridHeatPump' in asset_portfolio:
-            p_hhp = problem.get_first_value_from_component('p_hhp')
-            ret_val["heat_power_to_buffer_hhp"] = problem.get_first_value_from_component('Q_to_buffer')
-            ret_val["heat_power_to_house"] = problem.get_first_value_from_component('Q_to_house')
+            p_hhp_w = problem.get_first_value_from_component('p_hhp') * 1000
+            ret_val["heat_power_to_buffer_hhp"] = problem.get_first_value_from_component('Q_to_buffer') * 1000
+            ret_val["heat_power_to_house_hhp"] = problem.get_first_value_from_component('Q_to_house') * 1000
 
-            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'HybridHeatPump', p_hhp)
+            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'HybridHeatPump', p_hhp_w)
             aggregated_active_power += p
             aggregated_reactive_power += q
 
         if 'EVChargingStation' in asset_portfolio:
-            p_ev = problem.get_first_value_from_component('p_ev')
-            ret_val['dispatch_ev'] = p_ev
+            p_ev_w = problem.get_first_value_from_component('p_ev') * 1000
+            ret_val['dispatch_ev'] = p_ev_w
 
-            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'EVChargingStation', p_ev)
+            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'EVChargingStation', p_ev_w)
             aggregated_active_power += p
             aggregated_reactive_power += q
 
@@ -525,7 +533,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                 self.is_static_bw_tariff = True
                 self.static_bw_price_low = 0.0
                 self.static_bw_price_high = measure.costInformation.variableOperationalCosts.value
-                self.static_bw_powers = {esdl_id: self.esdl_objects[esdl_id].capacity for esdl_id
+                self.static_bw_powers = {esdl_id: EsdlEntityParameterParser.get_capacity_from_econnection(self.esdl_objects[esdl_id]) for esdl_id
                                          in self.simulator_configuration.esdl_ids}
 
             if measure.name == 'variable_tariff':
