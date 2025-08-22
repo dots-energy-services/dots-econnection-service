@@ -677,7 +677,7 @@ class PortfolioOptimizationProblem:
         self.model.write('model.mps', io_options={'symbolic_solver_labels': True})
         self.highspy_interface.setOptionValue('mip_rel_gap', mip_gap)
         self.highspy_interface.setOptionValue('presolve', 'on')
-        self.highspy_interface.setOptionValue('log_to_console', show_logs)
+        self.highspy_interface.setOptionValue('log_to_console', True)
         self.highspy_interface.readModel(filename)
 
         LOGGER.info(self.highspy_interface.getConstrs()[0])
