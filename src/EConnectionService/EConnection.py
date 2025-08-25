@@ -262,7 +262,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             problem = self.create_portfolio_optimization_problem(scaled_param_dict, time_step_number, esdl_id)
 
             # Solve problem
-            problem.solve(mip_gap=0.001)  # mip_gap=0.07
+            problem.solve(mip_gap=0.001, show_logs=True)
             LOGGER.info("Optimization problem solved")
 
             # Get peak tariff if necessary
