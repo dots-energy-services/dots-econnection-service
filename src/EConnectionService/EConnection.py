@@ -252,6 +252,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         - read the return values from the model
         - compute the (3 phase unbalanced) dispatch
         """
+        LOGGER.info(f"Params: {param_dict}")
         scaled_param_dict = self.apply_scaling_to_input_params_calculate_dispatch(param_dict)
 
         # START user calc
