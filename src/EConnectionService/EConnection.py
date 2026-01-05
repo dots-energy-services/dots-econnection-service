@@ -155,7 +155,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         # Fixed global data, the same for all econnections
         self.optimization_horizon = 48  # number of time steps
-        self.round_decimals = 5
+        self.round_decimals = 10
 
         # Dynamic global data, the same for all econnections
         self.da_prices: Optional[List[float]] = None
