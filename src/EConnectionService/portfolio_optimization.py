@@ -1,4 +1,5 @@
 import re
+import highspy
 import esdl
 import pyomo.environ as pyo
 import numpy as np
@@ -6,7 +7,6 @@ from dots_infrastructure.Logger import LOGGER
 from pyomo.core.base.var import ScalarVar
 from pyomo.core.base.param import IndexedParam, ScalarParam
 import os
-import highspy
 
 from EConnectionService.esdl_entity_parameter_parser import EsdlEntityParameterParser
 
