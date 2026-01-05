@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
+import highspy
 import helics as h
 from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation, TimeRequestType
 from dots_infrastructure.HelicsFederateHelpers import HelicsSimulationExecutor
@@ -18,6 +19,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
     def __init__(self):
         super().__init__()
+        self.highspy_interface = highspy.Highs()
 
         subscriptions_values = [
             SubscriptionDescription(esdl_type="EnvironmentalProfiles",
@@ -299,7 +301,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         asset_portfolio = self.asset_portfolios[esdl_id]
 
         # Create optimization problem
-        problem = PortfolioOptimizationProblem()
+        problem = PortfolioOptimizationProblem(self.highspy_interface)
         time_params = {'n_steps': self.optimization_horizon,
                        'dt': self.ems_time_step_seconds,
                        'time_step_nr': time_step_nr}

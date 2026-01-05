@@ -1,5 +1,4 @@
-import re
-import highspy
+from pathlib import Path
 import esdl
 import pyomo.environ as pyo
 import numpy as np
@@ -7,21 +6,22 @@ from dots_infrastructure.Logger import LOGGER
 from pyomo.core.base.var import ScalarVar
 from pyomo.core.base.param import IndexedParam, ScalarParam
 import os
+import highspy
 
 from EConnectionService.esdl_entity_parameter_parser import EsdlEntityParameterParser
 
 
 class PortfolioOptimizationProblem:
-    def __init__(self):
+    def __init__(self, highspy_interface: highspy.Highs):
         self.model = pyo.ConcreteModel()
         self.has_heat_pump = False
+        self.highspy_interface = highspy.Highs()
 
     def create_time(self, time_params: dict):
         self.model.time_index_p = pyo.RangeSet(0, time_params['n_steps'] - 1)
         self.model.time_index_soc = pyo.RangeSet(0, time_params['n_steps'])
         self.model.dt = pyo.Param(initialize=time_params['dt'] / 3600)
         self.model.time_step_nr = pyo.Param(initialize=time_params['time_step_nr'])
-        self.highspy_interface = highspy.Highs()
         self.solution : highspy.HighsSolution = None
 
     def create_electricity_demand(self, active_power: list):
@@ -673,11 +673,14 @@ class PortfolioOptimizationProblem:
 
 
     def solve(self, mip_gap, show_logs=False):
-        filename = 'model.mps'
-        self.model.write('model.mps', io_options={'symbolic_solver_labels': True})
+        filename_path = Path(__file__).parent / "model.mps"
+        filename = str(filename_path)
+        self.model.write(filename, io_options={'symbolic_solver_labels': True})
+        self.highspy_interface.clear()
         self.highspy_interface.setOptionValue('mip_rel_gap', mip_gap)
         self.highspy_interface.setOptionValue('presolve', 'on')
-        self.highspy_interface.setOptionValue('log_to_console', show_logs)
+        self.highspy_interface.setOptionValue("output_flag", False)
+        self.highspy_interface.setOptionValue("log_to_console", False)
         self.highspy_interface.readModel(filename)
 
         LOGGER.info(self.highspy_interface.getConstrs()[0])
