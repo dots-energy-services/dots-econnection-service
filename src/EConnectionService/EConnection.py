@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
+import highspy
 import helics as h
 from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation, TimeRequestType
 from dots_infrastructure.HelicsFederateHelpers import HelicsSimulationExecutor
@@ -18,6 +19,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
     def __init__(self):
         super().__init__()
+        self.highspy_interface = highspy.Highs()
 
         subscriptions_values = [
             SubscriptionDescription(esdl_type="EnvironmentalProfiles",
@@ -153,7 +155,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         # Fixed global data, the same for all econnections
         self.optimization_horizon = 48  # number of time steps
-        self.round_decimals = 5
+        self.round_decimals = 10
 
         # Dynamic global data, the same for all econnections
         self.da_prices: Optional[List[float]] = None
@@ -252,6 +254,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         - read the return values from the model
         - compute the (3 phase unbalanced) dispatch
         """
+        LOGGER.info(f"Params: {param_dict}")
         scaled_param_dict = self.apply_scaling_to_input_params_calculate_dispatch(param_dict)
 
         # START user calc
@@ -298,7 +301,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         asset_portfolio = self.asset_portfolios[esdl_id]
 
         # Create optimization problem
-        problem = PortfolioOptimizationProblem()
+        problem = PortfolioOptimizationProblem(self.highspy_interface)
         time_params = {'n_steps': self.optimization_horizon,
                        'dt': self.ems_time_step_seconds,
                        'time_step_nr': time_step_nr}
