@@ -606,7 +606,7 @@ class PortfolioOptimizationProblem:
                 slack_costs = sum(1.0e3 * m.slack_soc_min[t] + 1.0e3 * m.slack_soc_max[t] for t in m.time_index_p)
             else:
                 slack_costs = 0.0
-            costs = m.buy_costs - m.sell_rev + slack_costs
+            costs = m.buy_costs + m.sell_rev + slack_costs
             if is_grid_tariff:
                 costs += m.grid_costs
             return costs
