@@ -45,8 +45,8 @@ class Test(unittest.TestCase):
 
     def test_different_tariff_instruments(self):
         test_examples = [
-            EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv", "dispatch_ev", "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power"], 'test-bandwidth.esdl'),
-            # EmsTestParam("1412f71f-a9d2-4c66-a834-385cf91c3767", ["aggregated_active_power", "aggregated_reactive_power", "dispatch_pv", "heat_power_to_buffer_hhp", "heat_power_to_house_hhp"], 'test-bandwidth.esdl'),
+            # EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv", "dispatch_ev", "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power"], 'test-bandwidth.esdl'),
+            EmsTestParam("1412f71f-a9d2-4c66-a834-385cf91c3767", ["aggregated_active_power", "aggregated_reactive_power", "dispatch_pv", "heat_power_to_buffer_hhp", "heat_power_to_house_hhp"], 'test-bandwidth.esdl'),
             # EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv", "dispatch_ev", "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power"], 'test-variable-peak-tariff.esdl'),
             # EmsTestParam("1412f71f-a9d2-4c66-a834-385cf91c3767", ["aggregated_active_power", "aggregated_reactive_power", "dispatch_pv", "heat_power_to_buffer_hhp", "heat_power_to_house_hhp"], 'test-variable-peak-tariff.esdl'),
             # EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv", "dispatch_ev", "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power"], 'test-peak-tariff.esdl'),

@@ -703,7 +703,7 @@ class PortfolioOptimizationProblem:
 
         self.model.static_bw_price_high = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_high)
         self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_power)
-        self.model.static_bw_costs = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        self.model.static_bw_costs = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
         self.model.grid_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
 
         self.model.con_bw_low = pyo.Constraint(
