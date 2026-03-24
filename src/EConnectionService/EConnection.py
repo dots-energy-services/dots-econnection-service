@@ -254,7 +254,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         - read the return values from the model
         - compute the (3 phase unbalanced) dispatch
         """
-        LOGGER.info(f"Params: {param_dict}")
+        LOGGER.debug(f"Params: {param_dict}")
         scaled_param_dict = self.apply_scaling_to_input_params_calculate_dispatch(param_dict)
 
         # START user calc
@@ -388,8 +388,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         is_grid_tariff = False
         if self.is_static_bw_tariff:
             is_grid_tariff = True
-            problem.create_static_bw_tariff(self.static_bw_price_low,
-                                            self.static_bw_price_high,
+            problem.create_static_bw_tariff(self.static_bw_price_high,
                                             self.static_bw_powers[esdl_id])
         if self.is_variable_tariff:
             is_grid_tariff = True

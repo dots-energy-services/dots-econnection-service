@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 import esdl
 import pyomo.environ as pyo
 import numpy as np
@@ -16,6 +17,7 @@ class PortfolioOptimizationProblem:
         self.model = pyo.ConcreteModel()
         self.has_heat_pump = False
         self.highspy_interface = highspy.Highs()
+        self.connection_capacity = 17.0  # TODO: remove magic number
 
     def create_time(self, time_params: dict):
         self.model.time_index_p = pyo.RangeSet(0, time_params['n_steps'] - 1)
@@ -529,49 +531,48 @@ class PortfolioOptimizationProblem:
         self.has_heat_pump = True
 
     def create_energy_balance(self, asset_portfolio: dict):
+        self.model.e_prosumed = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
         self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
+        # self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
 
-        capacity = 17.0  # TODO: remove magic number
+        self.model.con_energy_e_prosumed = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            m.e_prosumed[t] <= self.connection_capacity * m.dt
+        )
+        self.model.con_energy_e_prosumed = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            -self.connection_capacity * m.dt <= m.e_prosumed[t]
+        )
         self.model.con_energy_buy_ub = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.e_buy[t] <= m.z_buy[t] * capacity * m.dt
+            m.e_buy[t] <= self.connection_capacity * m.dt
         )
 
         self.model.con_energy_sell_ub = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.e_sell[t] <= (1 - m.z_buy[t]) * capacity * m.dt
+            m.e_sell[t] <= self.connection_capacity * m.dt
         )
 
-        def con_energy_buy_f(m, t):
-            e_buy = 0.0
+        def con_energy_e_prosumed_f(m, t):
+            e_prosumed = 0.0
             if 'ElectricityDemand' in asset_portfolio:
-                e_buy += m.p_edemand[t] * m.dt
+                e_prosumed += m.p_edemand[t] * m.dt
             if 'PVInstallation' in asset_portfolio:
-                e_buy -= m.p_pv_use[t] * m.dt
-            if 'Battery' in asset_portfolio:
-                e_buy += (m.p_ch[t] - m.p_bat_use[t]) * m.dt
+                e_prosumed -= m.p_pv_use[t] * m.dt
+                e_prosumed -= m.p_pv_sell[t] * m.dt
             if 'HeatPump' in asset_portfolio:
-                e_buy += m.p_hp[t] * m.dt
+                e_prosumed += m.p_hp[t] * m.dt
             if 'HybridHeatPump' in asset_portfolio:
-                e_buy += m.p_hhp[t] * m.dt
+                e_prosumed += m.p_hhp[t] * m.dt
             if 'EVChargingStation' in asset_portfolio:
-                e_buy += m.p_ev[t] * m.dt
+                e_prosumed += m.p_ev[t] * m.dt
 
-            return m.e_buy[t] == e_buy
+            return m.e_prosumed[t] == e_prosumed
 
-        self.model.con_energy_buy = pyo.Constraint(self.model.time_index_p, rule=con_energy_buy_f)
+        self.model.con_energy_prosumed = pyo.Constraint(self.model.time_index_p, rule=con_energy_e_prosumed_f)
 
-        def con_energy_sell_f(m, t):
-            e_sell = 0.0
-            if 'PVInstallation' in asset_portfolio:
-                e_sell += m.p_pv_sell[t] * m.dt
-            if 'Battery' in asset_portfolio:
-                e_sell += m.p_bat_sell[t] * m.dt
-            return m.e_sell[t] == e_sell
-
-        self.model.con_energy_sell = pyo.Constraint(self.model.time_index_p, rule=con_energy_sell_f)
+        self.model.con_energy_balance = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: -m.e_sell[t] + m.e_buy[t] == m.e_prosumed[t])
 
     def get_first_value_from_component(self, name: str):
         column = self.highspy_interface.getColByName(f"{name}(0)")
@@ -606,7 +607,7 @@ class PortfolioOptimizationProblem:
                 slack_costs = sum(1.0e3 * m.slack_soc_min[t] + 1.0e3 * m.slack_soc_max[t] for t in m.time_index_p)
             else:
                 slack_costs = 0.0
-            costs = m.buy_costs - m.sell_rev + slack_costs
+            costs = m.buy_costs + m.sell_rev + slack_costs
             if is_grid_tariff:
                 costs += m.grid_costs
             return costs
@@ -633,7 +634,7 @@ class PortfolioOptimizationProblem:
         - dynamic: price = flat_price + da_price or da_price if feed-in
         - static: price = static_price or feed_in_price if feed-in
         """
-        self.model.sell_rev = pyo.Var(within=pyo.Reals, initialize=0)
+        self.model.sell_rev = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
         if energy_contract == 'dynamic':
             if is_feed_in_tariff:
                 sell_prices = da_prices
@@ -647,7 +648,7 @@ class PortfolioOptimizationProblem:
 
         # Convert e_buy from J to kWh to match the price unit Eur/kWh
         self.model.sell_rev_def = pyo.Constraint(
-            rule=lambda m: m.sell_rev == sum(sell_prices[t] * m.e_sell[t] for t in m.time_index_p))
+            rule=lambda m: m.sell_rev == sum(sell_prices[t] * m.e_prosumed[t] for t in m.time_index_p))
 
     def create_buy_costs(self,
                          energy_contract: str,
@@ -660,7 +661,7 @@ class PortfolioOptimizationProblem:
         - dynamic: price = flat_price + da_price
         - static: price = static_price
         """
-        self.model.buy_costs = pyo.Var(within=pyo.Reals, initialize=0)
+        self.model.buy_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
         # Determine costs from buying energy
         if energy_contract == 'dynamic':
             buy_prices = [price + dynamic_flat_price for price in da_prices]
@@ -669,10 +670,10 @@ class PortfolioOptimizationProblem:
 
         # Convert e_buy from J to kWh to match the price unit Eur/kWh
         self.model.buy_costs_def = pyo.Constraint(
-            rule=lambda m: m.buy_costs == sum(buy_prices[t] * m.e_buy[t] for t in m.time_index_p))
+            rule=lambda m: m.buy_costs == sum(buy_prices[t] * m.e_prosumed[t] for t in m.time_index_p))
 
 
-    def solve(self, mip_gap, show_logs=False):
+    def solve(self, mip_gap):
         filename_path = Path(__file__).parent / "model.mps"
         filename = str(filename_path)
         self.model.write(filename, io_options={'symbolic_solver_labels': True})
@@ -682,10 +683,10 @@ class PortfolioOptimizationProblem:
         self.highspy_interface.setOptionValue("output_flag", False)
         self.highspy_interface.setOptionValue("log_to_console", False)
         self.highspy_interface.readModel(filename)
-
-        LOGGER.info(self.highspy_interface.getConstrs()[0])
-
+        start = time.time()
         self.highspy_interface.run()
+        end = time.time()
+        LOGGER.info(f"Time to solve: {end - start} seconds")
         model_status = self.highspy_interface.getModelStatus()
 
         if not (self.highspy_interface.modelStatusToString(model_status) == "Optimal" or self.highspy_interface.modelStatusToString(model_status) == "Solve error"):
@@ -698,47 +699,20 @@ class PortfolioOptimizationProblem:
 
 
     def create_static_bw_tariff(self,
-                                static_bw_price_low: float,
                                 static_bw_price_high: float,
                                 static_bw_power: float):
 
-        self.model.static_bw_price_low = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_low)
         self.model.static_bw_price_high = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_high)
         self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_power)
         self.model.static_bw_costs = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.grid_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
 
-        # Constraints
         self.model.con_bw_low = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            # eur/kWh x kWh
-            m.static_bw_price_high * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
-
-        self.model.con_bw_high = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
             # eur/kWh x kWh
             m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
         self.model.con_grid_costs = pyo.Constraint(rule=lambda m: m.grid_costs == sum(m.static_bw_costs[t] for t in m.time_index_p))
-
-    def add_static_bw_tariff(self, incentive_inputs: dict):
-        # Params and variables
-        self.model.static_bw_price_low = pyo.Param(within=pyo.NonNegativeReals, initialize=incentive_inputs['static_bw_price_low'])
-        self.model.static_bw_price_high = pyo.Param(within=pyo.NonNegativeReals, initialize=incentive_inputs['static_bw_price_high'])
-        self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=incentive_inputs['static_bw_power'])
-
-        self.model.static_bw_costs = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-
-        # Constraints
-        self.model.con_bw_low = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            # eur/kWh x kWh
-            m.static_bw_price_high * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
-
-        self.model.con_bw_high = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            # eur/kWh x kWh
-            m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
     def create_variable_tariff(self, variable_tariff: list):
         variable_tariff_dict = self.it2dict(variable_tariff)
