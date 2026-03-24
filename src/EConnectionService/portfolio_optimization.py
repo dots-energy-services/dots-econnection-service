@@ -17,6 +17,7 @@ class PortfolioOptimizationProblem:
         self.model = pyo.ConcreteModel()
         self.has_heat_pump = False
         self.highspy_interface = highspy.Highs()
+        self.connection_capacity = 17.0  # TODO: remove magic number
 
     def create_time(self, time_params: dict):
         self.model.time_index_p = pyo.RangeSet(0, time_params['n_steps'] - 1)
@@ -535,14 +536,13 @@ class PortfolioOptimizationProblem:
         # self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         # self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
 
-        capacity = 17.0  # TODO: remove magic number
         self.model.con_energy_e_prosumed = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.e_prosumed[t] <= capacity * m.dt
+            m.e_prosumed[t] <= self.connection_capacity * m.dt
         )
         self.model.con_energy_e_prosumed = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            -capacity * m.dt <= m.e_prosumed[t]
+            -self.connection_capacity * m.dt <= m.e_prosumed[t]
         )
         # self.model.con_energy_buy_ub = pyo.Constraint(
         #     self.model.time_index_p, rule=lambda m, t:
@@ -703,13 +703,13 @@ class PortfolioOptimizationProblem:
 
         self.model.static_bw_price_high = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_high)
         self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_power)
-        self.model.static_bw_costs = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
+        self.model.static_bw_costs = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.grid_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
 
         self.model.con_bw_low = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            # eur/kWh x kWh
-            m.static_bw_price_high * (m.e_prosumed[t] - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
+            # eur/kWh x kWh # add connection capacity to ensure that the costs are not negative when prosuming from the grid (e_prosumed < 0)
+            m.static_bw_price_high * ((m.e_prosumed[t] + self.connection_capacity) - (m.static_bw_power + self.connection_capacity) * m.dt) <= m.static_bw_costs[t])
 
         # Constraints
         # self.model.con_bw_low = pyo.Constraint(
