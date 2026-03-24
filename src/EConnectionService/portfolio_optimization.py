@@ -532,8 +532,8 @@ class PortfolioOptimizationProblem:
 
     def create_energy_balance(self, asset_portfolio: dict):
         self.model.e_prosumed = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
-        # self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        # self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         # self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
 
         self.model.con_energy_e_prosumed = pyo.Constraint(
@@ -544,15 +544,15 @@ class PortfolioOptimizationProblem:
             self.model.time_index_p, rule=lambda m, t:
             -self.connection_capacity * m.dt <= m.e_prosumed[t]
         )
-        # self.model.con_energy_buy_ub = pyo.Constraint(
-        #     self.model.time_index_p, rule=lambda m, t:
-        #     m.e_buy[t] <= capacity * m.dt
-        # )
+        self.model.con_energy_buy_ub = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            m.e_buy[t] <= self.connection_capacity * m.dt
+        )
 
-        # self.model.con_energy_sell_ub = pyo.Constraint(
-        #     self.model.time_index_p, rule=lambda m, t:
-        #     m.e_sell[t] <= capacity * m.dt
-        # )
+        self.model.con_energy_sell_ub = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            m.e_sell[t] <= self.connection_capacity * m.dt
+        )
 
         def con_energy_e_prosumed_f(m, t):
             e_prosumed = 0.0
@@ -560,8 +560,7 @@ class PortfolioOptimizationProblem:
                 e_prosumed += m.p_edemand[t] * m.dt
             if 'PVInstallation' in asset_portfolio:
                 e_prosumed -= m.p_pv_use[t] * m.dt
-            if 'Battery' in asset_portfolio:
-                e_prosumed += (m.p_ch[t] - m.p_bat_use[t]) * m.dt
+                e_prosumed -= m.p_pv_sell[t] * m.dt
             if 'HeatPump' in asset_portfolio:
                 e_prosumed += m.p_hp[t] * m.dt
             if 'HybridHeatPump' in asset_portfolio:
@@ -570,6 +569,20 @@ class PortfolioOptimizationProblem:
                 e_prosumed += m.p_ev[t] * m.dt
 
             return m.e_prosumed[t] == e_prosumed
+
+        self.model.con_energy_prosumed = pyo.Constraint(self.model.time_index_p, rule=con_energy_e_prosumed_f)
+
+        self.model.con_energy_sell = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            m.e_sell[t] <= self.connection_capacity * m.dt - (m.e_prosumed[t] + self.connection_capacity * m.dt)
+        )
+
+        self.model.con_energy_sell = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            m.e_buy[t] <= m.e_prosumed[t]
+        )
+
+        self.model.con_energy_balance = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: -m.e_sell[t] + m.e_buy[t] == m.e_prosumed[t])
 
         self.model.con_energy_buy = pyo.Constraint(self.model.time_index_p, rule=con_energy_e_prosumed_f)
 
@@ -633,7 +646,7 @@ class PortfolioOptimizationProblem:
         - dynamic: price = flat_price + da_price or da_price if feed-in
         - static: price = static_price or feed_in_price if feed-in
         """
-        self.model.sell_rev = pyo.Var(within=pyo.Reals, initialize=0)
+        self.model.sell_rev = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
         if energy_contract == 'dynamic':
             if is_feed_in_tariff:
                 sell_prices = da_prices
@@ -647,7 +660,7 @@ class PortfolioOptimizationProblem:
 
         # Convert e_buy from J to kWh to match the price unit Eur/kWh
         self.model.sell_rev_def = pyo.Constraint(
-            rule=lambda m: m.sell_rev == sum(sell_prices[t] * m.e_prosumed[t] for t in m.time_index_p))
+            rule=lambda m: m.sell_rev == sum(sell_prices[t] * m.e_sell[t] for t in m.time_index_p))
 
     def create_buy_costs(self,
                          energy_contract: str,
@@ -660,7 +673,7 @@ class PortfolioOptimizationProblem:
         - dynamic: price = flat_price + da_price
         - static: price = static_price
         """
-        self.model.buy_costs = pyo.Var(within=pyo.Reals, initialize=0)
+        self.model.buy_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
         # Determine costs from buying energy
         if energy_contract == 'dynamic':
             buy_prices = [price + dynamic_flat_price for price in da_prices]
@@ -669,7 +682,7 @@ class PortfolioOptimizationProblem:
 
         # Convert e_buy from J to kWh to match the price unit Eur/kWh
         self.model.buy_costs_def = pyo.Constraint(
-            rule=lambda m: m.buy_costs == sum(buy_prices[t] * m.e_prosumed[t] for t in m.time_index_p))
+            rule=lambda m: m.buy_costs == sum(buy_prices[t] * m.e_buy[t] for t in m.time_index_p))
 
 
     def solve(self, mip_gap):
