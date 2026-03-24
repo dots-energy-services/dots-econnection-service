@@ -532,8 +532,8 @@ class PortfolioOptimizationProblem:
 
     def create_energy_balance(self, asset_portfolio: dict):
         self.model.e_prosumed = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
-        # self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        # self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         # self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
 
         self.model.con_energy_e_prosumed = pyo.Constraint(
@@ -544,15 +544,15 @@ class PortfolioOptimizationProblem:
             self.model.time_index_p, rule=lambda m, t:
             -self.connection_capacity * m.dt <= m.e_prosumed[t]
         )
-        # self.model.con_energy_buy_ub = pyo.Constraint(
-        #     self.model.time_index_p, rule=lambda m, t:
-        #     m.e_buy[t] <= self.connection_capacity * m.dt
-        # )
+        self.model.con_energy_buy_ub = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            m.e_buy[t] <= self.connection_capacity * m.dt
+        )
 
-        # self.model.con_energy_sell_ub = pyo.Constraint(
-        #     self.model.time_index_p, rule=lambda m, t:
-        #     m.e_sell[t] <= self.connection_capacity * m.dt
-        # )
+        self.model.con_energy_sell_ub = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            m.e_sell[t] <= self.connection_capacity * m.dt
+        )
 
         def con_energy_e_prosumed_f(m, t):
             e_prosumed = 0.0
@@ -579,10 +579,10 @@ class PortfolioOptimizationProblem:
 
         # self.model.con_energy_buy = pyo.Constraint(
         #     self.model.time_index_p, rule=lambda m, t:
-        #     m.e_buy[t] <= m.e_prosumed[t] + self.connection_capacity * m.dt
+        #     m.e_buy[t] <= m.e_sell[t]
         # )
 
-        # self.model.con_energy_balance = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: -m.e_sell[t] + m.e_buy[t] == m.e_prosumed[t])
+        self.model.con_energy_balance = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: -m.e_sell[t] + m.e_buy[t] == m.e_prosumed[t])
 
     def get_first_value_from_component(self, name: str):
         column = self.highspy_interface.getColByName(f"{name}(0)")
@@ -720,7 +720,7 @@ class PortfolioOptimizationProblem:
         self.model.con_bw_low = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
             # eur/kWh x kWh # add connection capacity to ensure that the costs are not negative when prosuming from the grid (e_prosumed < 0)
-            m.static_bw_price_high * ((m.e_prosumed[t] + self.connection_capacity) - (m.static_bw_power + self.connection_capacity) * m.dt) <= m.static_bw_costs[t])
+            m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
         # Constraints
         # self.model.con_bw_low = pyo.Constraint(
