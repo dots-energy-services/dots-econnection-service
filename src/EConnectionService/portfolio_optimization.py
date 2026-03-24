@@ -532,8 +532,8 @@ class PortfolioOptimizationProblem:
 
     def create_energy_balance(self, asset_portfolio: dict):
         self.model.e_prosumed = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
-        self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        # self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        # self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         # self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
 
         self.model.con_energy_e_prosumed = pyo.Constraint(
@@ -544,15 +544,15 @@ class PortfolioOptimizationProblem:
             self.model.time_index_p, rule=lambda m, t:
             -self.connection_capacity * m.dt <= m.e_prosumed[t]
         )
-        self.model.con_energy_buy_ub = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            m.e_buy[t] <= self.connection_capacity * m.dt
-        )
+        # self.model.con_energy_buy_ub = pyo.Constraint(
+        #     self.model.time_index_p, rule=lambda m, t:
+        #     m.e_buy[t] <= self.connection_capacity * m.dt
+        # )
 
-        self.model.con_energy_sell_ub = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            m.e_sell[t] <= self.connection_capacity * m.dt
-        )
+        # self.model.con_energy_sell_ub = pyo.Constraint(
+        #     self.model.time_index_p, rule=lambda m, t:
+        #     m.e_sell[t] <= self.connection_capacity * m.dt
+        # )
 
         def con_energy_e_prosumed_f(m, t):
             e_prosumed = 0.0
@@ -572,19 +572,17 @@ class PortfolioOptimizationProblem:
 
         self.model.con_energy_prosumed = pyo.Constraint(self.model.time_index_p, rule=con_energy_e_prosumed_f)
 
-        self.model.con_energy_sell = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            m.e_sell[t] <= self.connection_capacity * m.dt - (m.e_prosumed[t] + self.connection_capacity * m.dt)
-        )
+        # self.model.con_energy_sell = pyo.Constraint(
+        #     self.model.time_index_p, rule=lambda m, t:
+        #     m.e_sell[t] <= self.connection_capacity * m.dt - (m.e_prosumed[t] + self.connection_capacity * m.dt)
+        # )
 
-        self.model.con_energy_sell = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            m.e_buy[t] <= m.e_prosumed[t]
-        )
+        # self.model.con_energy_buy = pyo.Constraint(
+        #     self.model.time_index_p, rule=lambda m, t:
+        #     m.e_buy[t] <= m.e_prosumed[t] + self.connection_capacity * m.dt
+        # )
 
-        self.model.con_energy_balance = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: -m.e_sell[t] + m.e_buy[t] == m.e_prosumed[t])
-
-        self.model.con_energy_buy = pyo.Constraint(self.model.time_index_p, rule=con_energy_e_prosumed_f)
+        # self.model.con_energy_balance = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: -m.e_sell[t] + m.e_buy[t] == m.e_prosumed[t])
 
     def get_first_value_from_component(self, name: str):
         column = self.highspy_interface.getColByName(f"{name}(0)")
@@ -660,7 +658,7 @@ class PortfolioOptimizationProblem:
 
         # Convert e_buy from J to kWh to match the price unit Eur/kWh
         self.model.sell_rev_def = pyo.Constraint(
-            rule=lambda m: m.sell_rev == sum(sell_prices[t] * m.e_sell[t] for t in m.time_index_p))
+            rule=lambda m: m.sell_rev == sum(sell_prices[t] * m.e_prosumed[t] for t in m.time_index_p))
 
     def create_buy_costs(self,
                          energy_contract: str,
@@ -682,7 +680,7 @@ class PortfolioOptimizationProblem:
 
         # Convert e_buy from J to kWh to match the price unit Eur/kWh
         self.model.buy_costs_def = pyo.Constraint(
-            rule=lambda m: m.buy_costs == sum(buy_prices[t] * m.e_buy[t] for t in m.time_index_p))
+            rule=lambda m: m.buy_costs == sum(buy_prices[t] * m.e_prosumed[t] for t in m.time_index_p))
 
 
     def solve(self, mip_gap):

@@ -1,6 +1,6 @@
 {
     "dispatch_ev": 0.0,
-    "dispatch_pv": -52.0,
+    "dispatch_pv": -977.7777778,
     "heat_power_to_tank_dhw": 0.0,
     "heat_power_to_buffer": 0.0,
     "heat_power_to_dhw": 0.0,
@@ -8,9 +8,9 @@
     "heat_power_to_buffer_hhp": 0.0,
     "heat_power_to_house_hhp": 0.0,
     "aggregated_active_power": [
-        0.0,
-        0.0,
-        0.0
+        -308.5925926,
+        -308.5925926,
+        -308.5925926
     ],
     "aggregated_reactive_power": [
         5.697191156433628,
