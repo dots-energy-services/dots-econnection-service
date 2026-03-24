@@ -5,16 +5,16 @@
     "heat_power_to_buffer": 0.0,
     "heat_power_to_dhw": 0.0,
     "heat_power_to_house": 0.0,
-    "heat_power_to_buffer_hhp": 2699.999999999932,
+    "heat_power_to_buffer_hhp": 0.0,
     "heat_power_to_house_hhp": 0.0,
     "aggregated_active_power": [
-        412.6804827542496,
         -308.5925926,
-        -308.5925926
+        -308.5925926,
+        -308.5925925999934
     ],
     "aggregated_reactive_power": [
-        242.7681865188519,
         5.697191156433628,
-        5.697191156433628
+        5.697191156433628,
+        5.697191156435797
     ]
 }

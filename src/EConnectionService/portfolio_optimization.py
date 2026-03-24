@@ -572,16 +572,6 @@ class PortfolioOptimizationProblem:
 
         self.model.con_energy_prosumed = pyo.Constraint(self.model.time_index_p, rule=con_energy_e_prosumed_f)
 
-        # self.model.con_energy_sell = pyo.Constraint(
-        #     self.model.time_index_p, rule=lambda m, t:
-        #     m.e_sell[t] <= self.connection_capacity * m.dt - (m.e_prosumed[t] + self.connection_capacity * m.dt)
-        # )
-
-        # self.model.con_energy_buy = pyo.Constraint(
-        #     self.model.time_index_p, rule=lambda m, t:
-        #     m.e_buy[t] <= m.e_sell[t]
-        # )
-
         self.model.con_energy_balance = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: -m.e_sell[t] + m.e_buy[t] == m.e_prosumed[t])
 
     def get_first_value_from_component(self, name: str):
@@ -719,19 +709,8 @@ class PortfolioOptimizationProblem:
 
         self.model.con_bw_low = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            # eur/kWh x kWh # add connection capacity to ensure that the costs are not negative when prosuming from the grid (e_prosumed < 0)
+            # eur/kWh x kWh
             m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
-
-        # Constraints
-        # self.model.con_bw_low = pyo.Constraint(
-        #     self.model.time_index_p, rule=lambda m, t:
-        #     # eur/kWh x kWh
-        #     m.static_bw_price_high * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
-
-        # self.model.con_bw_high = pyo.Constraint(
-        #     self.model.time_index_p, rule=lambda m, t:
-        #     # eur/kWh x kWh
-        #     m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
         self.model.con_grid_costs = pyo.Constraint(rule=lambda m: m.grid_costs == sum(m.static_bw_costs[t] for t in m.time_index_p))
 
