@@ -136,6 +136,65 @@ class PortfolioOptimizationProblem:
             m.p_pv_use[t] + m.p_pv_sell[t] <= m.p_pv_max[t]
         )
 
+    def create_battery(self, battery: esdl.Battery, state_of_charge : float):
+
+        parameters = EsdlEntityParameterParser.get_battery_parameters(battery)
+
+        # Parameters
+        self.model.capacity = pyo.Param(within=pyo.NonNegativeReals, initialize=parameters.capacity_kw)
+        self.model.init_soc = pyo.Param(within=pyo.NonNegativeReals, initialize=state_of_charge)
+
+        self.model.hor_soc = pyo.Param(within=pyo.NonNegativeReals, initialize=0.5 * parameters.capacity_kw)
+        self.model.ch_eff = pyo.Param(within=pyo.NonNegativeReals, initialize=parameters.charge_efficiency)
+        self.model.dis_ch_eff = pyo.Param(within=pyo.NonNegativeReals, initialize=parameters.discharge_efficiency)
+        self.model.max_ch_rate = pyo.Param(within=pyo.NonNegativeReals, initialize=parameters.max_charge_rate_kw)
+        self.model.max_dis_ch_rate = pyo.Param(within=pyo.NonNegativeReals, initialize=parameters.max_discharge_rate_kw)
+
+        # Variables
+        self.model.p_ch = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        self.model.p_bat_use = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        self.model.p_bat_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        self.model.z_ch = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
+        self.model.soc = pyo.Var(self.model.time_index_soc, within=pyo.NonNegativeReals, initialize=self.model.init_soc)
+
+        # When charging you lose depending on your charge efficiency
+        self.model.con_bat_ch_limit = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            m.ch_eff * m.p_ch[t] <= m.z_ch[t] * m.max_ch_rate
+        )
+
+        # When discharching you want to discharge such that m.p_bat_use[t] + m.p_bat_sell[t] make up the exact amount
+        self.model.con_bat_dch_limit = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+             1 / m.dis_ch_eff * (m.p_bat_use[t] + m.p_bat_sell[t]) <= (1 - m.z_ch[t]) * m.max_dis_ch_rate
+        )
+
+        self.model.con_soc_min = pyo.Constraint(
+            self.model.time_index_soc, rule=lambda m, t:
+            m.soc[t] >= 0.0
+        )
+
+        self.model.con_soc_max = pyo.Constraint(
+            self.model.time_index_soc, rule=lambda m, t:
+            m.soc[t] <= m.capacity
+        )
+
+        self.model.con_soc_init = pyo.Constraint(
+            self.model.time_index_soc, rule=lambda m, t:
+            m.soc[m.time_index_soc.first()] == m.init_soc
+        )
+
+        self.model.con_soc_hor = pyo.Constraint(
+            self.model.time_index_soc, rule=lambda m, t:
+            m.soc[m.time_index_soc.last()] >= m.hor_soc
+        )
+
+        self.model.con_soc_update = pyo.Constraint(
+            self.model.time_index_soc, rule=lambda m, t:
+            m.soc[t + 1] == m.soc[t] + (m.ch_eff * m.p_ch[t] - 1 / m.dis_ch_eff * (m.p_bat_use[t] + m.p_bat_sell[t])) * m.dt
+            if t < m.time_index_soc.last() else pyo.Constraint.Skip
+        )
+
     def create_heat_pump(self,
                          heat_pump: esdl.HeatPump,
                          dhw_temperature: float,

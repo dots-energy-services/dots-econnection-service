@@ -26,6 +26,7 @@ Calculate the dispatch of of all assets in the portfolio. It does so by 1) Creat
 |buffer_temperature|HybridHeatPump|DOUBLE|K|Current temperature in the space heating tank of the hybrid heat pump system.|
 |house_temperatures|HybridHeatPump|VECTOR|K|Current temperatures in interior and envelope of the house, as communicated by the hybrid heat pump.|
 |state_of_charge_ev|EVChargingStation|DOUBLE|J|Current state of charge in the electric vehicle|
+|state_of_charge_battery|Battery|DOUBLE|W|Current state of charge in the battery|
 #### Output values
 |Name             |data_type             |unit             |description             |
 |-----------------|----------------------|-----------------|------------------------|
@@ -33,6 +34,7 @@ Calculate the dispatch of of all assets in the portfolio. It does so by 1) Creat
 |aggregated_reactive_power|VECTOR|VAr|The total reactive power dispatch of the house accross the 3 phases|
 |dispatch_pv|DOUBLE|W|Dispatch of the pv installation|
 |dispatch_ev|DOUBLE|W|Dispatch of the electric vehicles|
+|active_power_to_charge|DOUBLE|W|Active power to (dis)charge the battery|
 |heat_power_to_tank_dhw|DOUBLE|W|Amount of heat the heat pump brings into the domestic hot water tank.|
 |heat_power_to_buffer|DOUBLE|W|Amount of heat the heat pump brings into the space heating tank.|
 |heat_power_to_dhw|DOUBLE|W|Amount of heat that gets removed from the domestic hot water tank for heating water.|
