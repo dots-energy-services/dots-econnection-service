@@ -519,9 +519,9 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         active_powers = ret_val['aggregated_active_power']
         reactive_powers = ret_val['aggregated_reactive_power']
 
-        for i in range(1,4):
-            name_apparent_power = f'apparent_power_ph{i}'
-            name_active_power = f'active_power_ph{i}'
+        for i in range(3):
+            name_apparent_power = f'apparent_power_ph{i + 1}'
+            name_active_power = f'active_power_ph{i + 1}'
             apparent_power = round(np.sqrt(active_powers[i] ** 2 + reactive_powers[i] ** 2), self.round_decimals)
             self.influx_connector.set_time_step_data_point(esdl_id, name_apparent_power, simulation_time, apparent_power)
             self.influx_connector.set_time_step_data_point(esdl_id, name_active_power, simulation_time, active_powers[i])
