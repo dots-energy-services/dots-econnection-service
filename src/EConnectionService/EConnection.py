@@ -282,7 +282,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                 self.peak_costs[esdl_id] = problem.get_first_value_from_component('peak_costs')
 
             # Get results
-            ret_val = self.get_return_values_from_problem(problem, esdl_id)
+            ret_val = self.get_return_values_from_problem(problem, esdl_id, simulation_time)
         else:
             ret_val = self.get_return_values_no_ems(param_dict, esdl_id)
 
@@ -440,7 +440,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         return ret_val
 
-    def get_return_values_from_problem(self, problem: PortfolioOptimizationProblem, esdl_id: EsdlId):
+    def get_return_values_from_problem(self, problem: PortfolioOptimizationProblem, esdl_id: EsdlId, simulation_time : datetime):
         ret_val = {'dispatch_ev': 0.0, 'dispatch_pv': -0.0, 'heat_power_to_tank_dhw': 0.0, 'heat_power_to_buffer': 0.0,
                    'heat_power_to_dhw': 0.0, 'heat_power_to_house': 0.0, 'heat_power_to_buffer_hhp': 0.0,
                    'heat_power_to_house_hhp': 0.0, 'aggregated_active_power': [0.0, 0.0, 0.0],
@@ -488,6 +488,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             ret_val["heat_power_to_buffer"] = problem.get_first_value_from_component('Q_to_buffer') * 1000
             ret_val["heat_power_to_dhw"] = problem.get_model_parameter_value('Q_to_dhw') * 1000
             ret_val["heat_power_to_house"] = problem.get_first_value_from_component('Q_to_house') * 1000
+            self.influx_connector.set_time_step_data_point(esdl_id, 'active_dispatch_hp', simulation_time, p_hp_w)
 
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'HeatPump', p_hp_w)
             aggregated_active_power += p
@@ -497,6 +498,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             p_hhp_w = problem.get_first_value_from_component('p_hhp') * 1000
             ret_val["heat_power_to_buffer_hhp"] = problem.get_first_value_from_component('Q_to_buffer') * 1000
             ret_val["heat_power_to_house_hhp"] = problem.get_first_value_from_component('Q_to_house') * 1000
+            self.influx_connector.set_time_step_data_point(esdl_id, 'active_dispatch_hhp', simulation_time, p_hhp_w)
 
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'HybridHeatPump', p_hhp_w)
             aggregated_active_power += p
@@ -528,8 +530,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         self.influx_connector.set_time_step_data_point(esdl_id, 'active_dispatch_ev', simulation_time, ret_val.get('dispatch_ev', 0.0))
         self.influx_connector.set_time_step_data_point(esdl_id, 'active_dispatch_pv', simulation_time, ret_val.get('dispatch_pv', 0.0))
-        self.influx_connector.set_time_step_data_point(esdl_id, 'active_dispatch_hp', simulation_time, ret_val.get('dispatch_hp', 0.0))
-        self.influx_connector.set_time_step_data_point(esdl_id, 'active_dispatch_hhp', simulation_time, ret_val.get('dispatch_hhp', 0.0))
+        self.influx_connector.set_time_step_data_point(esdl_id, 'active_dispatch_battery', simulation_time, ret_val.get('active_power_to_charge', 0.0))
 
     def get_p_q_3ph_from_asset(self, asset_portfolio: dict, asset_name: str, total_p: float) -> np.array:
         # Distribute p evenly over the connected phases
