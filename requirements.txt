@@ -1,5 +1,5 @@
 helics==3.6.1
-dots_infrastructure==1.0.10rc22
+dots_infrastructure==1.0.10
 Pyomo==6.9.5
 highspy==1.12.0
 numpy==2.4.6

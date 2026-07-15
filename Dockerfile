@@ -8,6 +8,6 @@ COPY pyproject.toml ./
 COPY README.md ./
 COPY requirements.txt ./
 
-RUN pip install -r requirements.txt --extra-index-url https://test.pypi.org/simple/ && \
+RUN pip install -r requirements.txt && \
     pip install ./
 ENTRYPOINT ["python3", "src/EConnectionService/EConnection.py"]
