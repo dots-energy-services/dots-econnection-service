@@ -55,6 +55,14 @@ class EVParameters:
     max_power_kw : float
     efficiency : float
 
+@dataclass
+class BatteryParameters:
+    charge_efficiency : float
+    discharge_efficiency : float
+    max_charge_rate_kw : float
+    max_discharge_rate_kw : float
+    capacity_kw : float
+
 class EsdlEntityParameterParser:
 
     @staticmethod
@@ -131,6 +139,16 @@ class EsdlEntityParameterParser:
             max_soc_kwh=ev_d['max_soc']  * 1/3.6e6,
             max_power_kw=ev.power * 0.001,
             efficiency = ev_d['efficiency'],
+        )
+    
+    @staticmethod
+    def get_battery_parameters(battery : esdl.Battery) -> BatteryParameters:
+        return BatteryParameters(
+            charge_efficiency=battery.chargeEfficiency,
+            discharge_efficiency=battery.dischargeEfficiency,
+            max_charge_rate_kw=battery.maxChargeRate * 0.001,
+            max_discharge_rate_kw=battery.maxDischargeRate * 0.001,
+            capacity_kw=battery.capacity * 1 / 3.6e6
         )
     
     @staticmethod
