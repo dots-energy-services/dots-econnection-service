@@ -7,7 +7,6 @@ This calculation service calculates the cost-optimal dispatch of a portfolio of 
 An important thing to note is that all the inputs are converted to kW's and kWh's before they are being used in the optimization problem. This holds for inputs coming from the ESDL as wel as inputs from other calculation services. Once the optimization problem is solved the outputs are converted back to watts and joules. The conversion is done to improve the solver's performance.
 
 ## Calculations
-
 ### calculate_dispatch 
 
 Calculate the dispatch of of all assets in the portfolio. It does so by 1) Create a portfolio optimization problem (single phase), 2) Solves the optimization model for the dispatch of the assets, 3)read the return values from the model, and 4) compute the (3 phase unbalanced) dispatch for the assets and the aggregated load on the three phases.
@@ -27,6 +26,7 @@ Calculate the dispatch of of all assets in the portfolio. It does so by 1) Creat
 |house_temperatures|HybridHeatPump|VECTOR|K|Current temperatures in interior and envelope of the house, as communicated by the hybrid heat pump.|
 |state_of_charge_ev|EVChargingStation|DOUBLE|J|Current state of charge in the electric vehicle|
 |state_of_charge_battery|Battery|DOUBLE|W|Current state of charge in the battery|
+|day_ahead_prices|EnergyMarket|VECTOR|EURO/MWh|Quarterly values for the day-ahead price in the coming 12 hours|
 #### Output values
 |Name             |data_type             |unit             |description             |
 |-----------------|----------------------|-----------------|------------------------|
