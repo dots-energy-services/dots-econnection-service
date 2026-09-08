@@ -77,7 +77,11 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             SubscriptionDescription(esdl_type="EnergyMarket",
                                     input_name="day_ahead_prices",
                                     input_unit="EURO/MWh",
-                                    input_type=h.HelicsDataType.VECTOR)
+                                    input_type=h.HelicsDataType.VECTOR),
+            SubscriptionDescription(esdl_type="EnergySystem",
+                                    input_name="congestion_signal",
+                                    input_unit="",
+                                    input_type=h.HelicsDataType.BOOLEAN)
         ]
 
         publication_values = [
@@ -263,15 +267,16 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         - read the return values from the model
         - compute the (3 phase unbalanced) dispatch
         """
-        LOGGER.info(f"Params: {param_dict}")
+        LOGGER.debug(f"Params: {param_dict}")
         scaled_param_dict = self.apply_scaling_to_input_params_calculate_dispatch(param_dict)
+        congestion_signal_active = get_single_param_with_name(param_dict, 'congestion_signal', False)
 
         # START user calc
 
         # Create problem if there is an EMS
         # If not: set load to the baseload and set all dispatch to 0
         if self.got_ems[esdl_id]:
-            problem = self.create_portfolio_optimization_problem(scaled_param_dict, time_step_number, esdl_id)
+            problem = self.create_portfolio_optimization_problem(scaled_param_dict, time_step_number, esdl_id, congestion_signal_active)
 
             # Solve problem
             problem.solve(mip_gap=0.001)  # mip_gap=0.07
@@ -294,7 +299,8 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
     def create_portfolio_optimization_problem(self,
                                               param_dict: dict,
                                               time_step_number: TimeStepInformation,
-                                              esdl_id: EsdlId):
+                                              esdl_id: EsdlId,
+                                              congestion_signal_active : bool = False):
         """
         Builds the optimization problem in the following steps:
         - Add index sets
@@ -415,7 +421,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             problem.create_variable_peak_tariff(self.variable_peak_tariff[time_step_nr - 1:time_step_nr - 1 + self.optimization_horizon],
                                                 self.peak_costs[esdl_id])
 
-        problem.create_objective_function(is_grid_tariff)
+        problem.create_objective_function(is_grid_tariff, congestion_signal_active)
 
         return problem
 

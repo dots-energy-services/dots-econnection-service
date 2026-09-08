@@ -658,7 +658,7 @@ class PortfolioOptimizationProblem:
         column = self.highspy_interface.getColByName(f"{name}")
         return self.solution.col_value[column[1]]
 
-    def create_objective_function(self, is_grid_tariff: bool):
+    def create_objective_function(self, is_grid_tariff: bool, congestion_signal : bool = False):
         def total_costs(m):
             # minimize slack variables to minimize constraint violation
             if self.has_heat_pump:
@@ -668,6 +668,10 @@ class PortfolioOptimizationProblem:
             costs = m.buy_costs - m.sell_rev + slack_costs
             if is_grid_tariff:
                 costs += m.grid_costs
+
+            if congestion_signal:
+                congestion_signal_constant = 5000
+                costs += congestion_signal_constant * (m.buy_costs + m.sell_rev)
             return costs
 
         self.model.objective_function = pyo.Objective(sense=pyo.minimize, expr=total_costs)
@@ -780,24 +784,6 @@ class PortfolioOptimizationProblem:
 
         self.model.con_grid_costs = pyo.Constraint(rule=lambda m: m.grid_costs == sum(m.static_bw_costs[t] for t in m.time_index_p))
 
-    def add_static_bw_tariff(self, incentive_inputs: dict):
-        # Params and variables
-        self.model.static_bw_price_low = pyo.Param(within=pyo.NonNegativeReals, initialize=incentive_inputs['static_bw_price_low'])
-        self.model.static_bw_price_high = pyo.Param(within=pyo.NonNegativeReals, initialize=incentive_inputs['static_bw_price_high'])
-        self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=incentive_inputs['static_bw_power'])
-
-        self.model.static_bw_costs = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-
-        # Constraints
-        self.model.con_bw_low = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            # eur/kWh x kWh
-            m.static_bw_price_high * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
-
-        self.model.con_bw_high = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            # eur/kWh x kWh
-            m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
     def create_variable_tariff(self, variable_tariff: list):
         variable_tariff_dict = self.it2dict(variable_tariff)
