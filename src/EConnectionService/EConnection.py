@@ -19,7 +19,6 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
     def __init__(self):
         super().__init__()
-        self.highspy_interface = highspy.Highs()
 
         subscriptions_values = [
             SubscriptionDescription(esdl_type="EnvironmentalProfiles",
@@ -102,11 +101,6 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                                    data_type=h.HelicsDataType.DOUBLE),
             PublicationDescription(global_flag=True,
                                    esdl_type="EConnection",
-                                   output_name="dispatch_ev",
-                                   output_unit="W",
-                                   data_type=h.HelicsDataType.DOUBLE),
-            PublicationDescription(global_flag=True,
-                                   esdl_type="EConnection",
                                    output_name="heat_power_to_tank_dhw",
                                    output_unit="W",
                                    data_type=h.HelicsDataType.DOUBLE),
@@ -169,6 +163,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         self.got_ems: dict[EsdlId, bool] = {}
         self.static_prices: dict[EsdlId, float] = {}
         self.dynamic_flat_prices: dict[EsdlId, float] = {}
+        self.esdl_entity_parser = EsdlEntityParameterParser()
 
         # Fixed global data, the same for all econnections
         self.optimization_horizon = 48  # number of time steps
@@ -270,13 +265,14 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         LOGGER.debug(f"Params: {param_dict}")
         scaled_param_dict = self.apply_scaling_to_input_params_calculate_dispatch(param_dict)
         congestion_signal_active = get_single_param_with_name(param_dict, 'congestion_signal', False)
+        self.simulator_configuration.start_time
 
         # START user calc
 
         # Create problem if there is an EMS
         # If not: set load to the baseload and set all dispatch to 0
         if self.got_ems[esdl_id]:
-            problem = self.create_portfolio_optimization_problem(scaled_param_dict, time_step_number, esdl_id, congestion_signal_active)
+            problem = self.create_portfolio_optimization_problem(scaled_param_dict, time_step_number, esdl_id, congestion_signal_active, simulation_time)
 
             # Solve problem
             problem.solve(mip_gap=0.001)  # mip_gap=0.07
@@ -293,6 +289,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         # Store results
         self.store_return_values(ret_val, simulation_time, esdl_id)
+        ret_val.pop('dispatch_ev')
 
         return ret_val
 
@@ -300,7 +297,8 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                                               param_dict: dict,
                                               time_step_number: TimeStepInformation,
                                               esdl_id: EsdlId,
-                                              congestion_signal_active : bool = False):
+                                              congestion_signal_active : bool,
+                                              simulation_time : datetime):
         """
         Builds the optimization problem in the following steps:
         - Add index sets
@@ -316,7 +314,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         asset_portfolio = self.asset_portfolios[esdl_id]
 
         # Create optimization problem
-        problem = PortfolioOptimizationProblem(self.highspy_interface)
+        problem = PortfolioOptimizationProblem(self.esdl_entity_parser)
         time_params = {'n_steps': self.optimization_horizon,
                        'dt': self.ems_time_step_seconds,
                        'time_step_nr': time_step_nr}
@@ -385,9 +383,8 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         if 'EVChargingStation' in asset_portfolio:
             ev_charging_station = asset_portfolio['EVChargingStation']['esdl_object']
-            state_of_charge = get_single_param_with_name(param_dict, "state_of_charge_ev")
-            state_of_charge = round(state_of_charge, self.round_decimals)
-            problem.create_ev_charging_station(ev_charging_station, state_of_charge)
+            ev_params = self.esdl_entity_parser.get_ev_parameters(ev_charging_station, self.simulator_configuration.start_time, self.simulator_configuration.simulation_duration_in_seconds, self.ems_time_step_seconds, simulation_time)
+            problem.create_ev_charging_station(ev_params)
 
         # Create energy balance constraints, grid tariff constraints and the objective function
         da_slice = get_single_param_with_name(param_dict, 'day_ahead_prices')
@@ -513,7 +510,9 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         if 'EVChargingStation' in asset_portfolio:
             p_ev_w = problem.get_first_value_from_component('p_ev') * 1000
             ret_val['dispatch_ev'] = p_ev_w
-
+            ev = asset_portfolio['EVChargingStation']['esdl_object']
+            soc_ev = problem.get_value_from_component_at_time_index('soc_ev', 1)
+            self.esdl_entity_parser.set_soc_ev(ev, soc_ev)
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'EVChargingStation', p_ev_w)
             aggregated_active_power += p
             aggregated_reactive_power += q
@@ -564,7 +563,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                 self.is_static_bw_tariff = True
                 self.static_bw_price_low = 0.0
                 self.static_bw_price_high = measure.costInformation.variableOperationalCosts.value
-                self.static_bw_powers = {esdl_id: EsdlEntityParameterParser.get_capacity_from_econnection(self.esdl_objects[esdl_id]) for esdl_id
+                self.static_bw_powers = {esdl_id: self.esdl_entity_parser.get_capacity_from_econnection(self.esdl_objects[esdl_id]) for esdl_id
                                          in self.simulator_configuration.esdl_ids}
 
             if measure.name == 'variable_tariff':

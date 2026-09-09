@@ -1636,6 +1636,7 @@
           <port xsi:type="esdl:InPort" connectedTo="85715f41-aef6-4d76-a3c5-64b11f67589a" id="42169dc0-af96-42e5-8097-fedd85fca0c2"/>
           <port xsi:type="esdl:InPort" connectedTo="cd3bbdc7-156b-48a0-a4c6-7093fb1a322e" id="90437946-61b9-474f-b1d9-5d6197b12582"/>
           <port xsi:type="esdl:InPort" connectedTo="30adeaac-2f56-4699-aebc-a4402a2cf594" id="523150fa-ed94-4dfe-acf6-0a83422dcd0d"/>
+          <port xsi:type="esdl:OutPort" id="b8d1d1e8-fdf3-404f-911c-e6d4d0edbcc7" name="Out" connectedTo="6f32b186-63b3-4a8c-a1fa-1c6e5e64ccf1"/>
         </asset>
         <asset xsi:type="esdl:HeatPump" power="18500.0" description="{&quot;buffer_capacitance&quot;: 1547710.0, &quot;buffer_temp_set&quot;: 313.15, &quot;buffer_temp_min&quot;: 298.15, &quot;buffer_temp_max&quot;: 338.15, &quot;buffer_temp_0&quot;: 315.93853596915767, &quot;buffer_temp_hor&quot;: 313.15, &quot;dhw_capacitance&quot;: 1254900.0, &quot;dhw_temp_set&quot;: 328.15, &quot;dhw_temp_min&quot;: 298.15, &quot;dhw_temp_max&quot;: 358.15, &quot;dhw_temp_0&quot;: 318.6502151044533, &quot;dhw_temp_hor&quot;: 328.15, &quot;dhw_temp_tap&quot;: 288.15, &quot;heat_element&quot;: 3000.0, &quot;cop_element&quot;: 1.0, &quot;house_temp_set&quot;: 292.65, &quot;house_temp_min&quot;: 291.84999999999997, &quot;house_temp_max&quot;: 293.45, &quot;house_temp_0&quot;: 292.4459134830428, &quot;house_temp_hor&quot;: 292.65}" name="hp_Home1" assetType="vrijst+1975-1991+family" id="ee3795bd-878c-4b89-9e32-5fc4c74816ce" powerFactor="0.95" COP="3.5">
           <port xsi:type="esdl:InPort" connectedTo="0e92f6b9-14a2-4554-99f9-57ff9879ae9a" id="63d10534-cc3c-40c2-97f5-10ca51b56c0c">
@@ -1993,7 +1994,28 @@
           <point xsi:type="esdl:Point" CRS="WGS84" lon="0.9413913640242653" lat="40.34772531879825"/>
           <point xsi:type="esdl:Point" CRS="WGS84" lon="0.9389406826711797" lat="40.34940353393508"/>
         </geometry>
-      </asset>      
+      </asset>
+      <asset xsi:type="esdl:MobilityDemand" fuelType="ELECTRICITY" name="ev_profile_Household0003 in kWh">
+        <port xsi:type="esdl:InPort" id="6f32b186-63b3-4a8c-a1fa-1c6e5e64ccf1" name="In" connectedTo="b8d1d1e8-fdf3-404f-911c-e6d4d0edbcc7"/>
+        <port xsi:type="esdl:OutPort" id="1123e620-19c6-43f0-adf3-8fba4374584f" name="Out">
+          <profile xsi:type="esdl:DateTimeProfile">
+            <element xsi:type="esdl:ProfileElement" from="2024-01-01T12:30:00.000000" to="2024-01-01T14:03:00.000000" value="11.0"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-02T16:45:00.000000" to="2024-01-03T12:48:00.000000" value="20.46"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-03T22:15:00.000000" to="2024-01-04T10:56:00.000000" value="23.54"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-04T15:30:00.000000" to="2024-01-05T11:34:00.000000" value="24.2"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-07T19:45:00.000000" to="2024-01-08T06:25:00.000000" value="22.99"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-08T17:30:00.000000" to="2024-01-09T08:19:00.000000" value="19.47"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-09T11:45:00.000000" to="2024-01-09T15:18:00.000000" value="12.32"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-12T09:30:00.000000" to="2024-01-12T13:00:00.000000" value="10.56"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-13T19:45:00.000000" to="2024-01-14T08:11:00.000000" value="19.58"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-14T00:13:00.000000" to="2024-01-14T08:11:00.000000" value="19.58"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-17T16:00:00.000000" to="2024-01-18T12:45:00.000000" value="22.11"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-18T19:30:00.000000" to="2024-01-18T23:20:00.000000" value="12.87"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-22T11:45:00.000000" to="2024-01-22T12:28:00.000000" value="7.92"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-23T16:15:00.000000" to="2024-01-24T05:07:00.000000" value="21.89"/>
+          </profile>
+        </port>
+      </asset>
     </area>
   </instance>
   <services xsi:type="esdl:Services" id="486073ef-0701-4ea2-bb03-237c24571fd4">

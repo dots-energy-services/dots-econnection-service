@@ -2004,20 +2004,7 @@
         <port xsi:type="esdl:InPort" id="6f32b186-63b3-4a8c-a1fa-1c6e5e64ccf1" name="In" connectedTo="b8d1d1e8-fdf3-404f-911c-e6d4d0edbcc7"/>
         <port xsi:type="esdl:OutPort" id="1123e620-19c6-43f0-adf3-8fba4374584f" name="Out">
           <profile xsi:type="esdl:DateTimeProfile">
-            <element xsi:type="esdl:ProfileElement" from="2024-01-01T12:30:00.000000" to="2024-01-01T14:03:00.000000" value="11.0"/>
-            <element xsi:type="esdl:ProfileElement" from="2024-01-02T16:45:00.000000" to="2024-01-03T12:48:00.000000" value="20.46"/>
-            <element xsi:type="esdl:ProfileElement" from="2024-01-03T22:15:00.000000" to="2024-01-04T10:56:00.000000" value="23.54"/>
-            <element xsi:type="esdl:ProfileElement" from="2024-01-04T15:30:00.000000" to="2024-01-05T11:34:00.000000" value="24.2"/>
-            <element xsi:type="esdl:ProfileElement" from="2024-01-07T19:45:00.000000" to="2024-01-08T06:25:00.000000" value="22.99"/>
-            <element xsi:type="esdl:ProfileElement" from="2024-01-08T17:30:00.000000" to="2024-01-09T08:19:00.000000" value="19.47"/>
-            <element xsi:type="esdl:ProfileElement" from="2024-01-09T11:45:00.000000" to="2024-01-09T15:18:00.000000" value="12.32"/>
-            <element xsi:type="esdl:ProfileElement" from="2024-01-12T09:30:00.000000" to="2024-01-12T13:00:00.000000" value="10.56"/>
-            <element xsi:type="esdl:ProfileElement" from="2024-01-14T00:13:00.000000" to="2024-01-14T08:11:00.000000" value="19.58"/>
-            <element xsi:type="esdl:ProfileElement" from="2024-01-16T13:15:00.000000" to="2024-01-16T14:13:00.000000" value="10.23"/>
-            <element xsi:type="esdl:ProfileElement" from="2024-01-17T16:00:00.000000" to="2024-01-18T12:45:00.000000" value="22.11"/>
-            <element xsi:type="esdl:ProfileElement" from="2024-01-18T19:30:00.000000" to="2024-01-18T23:20:00.000000" value="12.87"/>
-            <element xsi:type="esdl:ProfileElement" from="2024-01-22T11:45:00.000000" to="2024-01-22T12:28:00.000000" value="7.92"/>
-            <element xsi:type="esdl:ProfileElement" from="2024-01-23T16:15:00.000000" to="2024-01-24T05:07:00.000000" value="21.89"/>
+            <element xsi:type="esdl:ProfileElement" from="2024-01-14T00:13:00.000000" to="2024-01-14T00:43:00.000000" value="4.589999999955154545123156123"/>
           </profile>
         </port>
       </asset>
