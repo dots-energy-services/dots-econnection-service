@@ -27,7 +27,7 @@ class EmsTestParam:
     esdl_id : str
     expected_outcomes : List[str]
     esdl_file : str
-    congestion_signal_active : bool = False
+    congestion_signal_kw : float = 0.0
 
 class Test(unittest.TestCase):
 
@@ -70,14 +70,14 @@ class Test(unittest.TestCase):
 
     def test_different_tariff_instruments(self):
         test_examples = [
-            EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv",  "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power"], str(Path(__file__).parent / 'test-bandwidth.esdl')),
-            EmsTestParam("1412f71f-a9d2-4c66-a834-385cf91c3767", ["aggregated_active_power", "aggregated_reactive_power", "dispatch_pv", "heat_power_to_buffer_hhp", "heat_power_to_house_hhp"], str(Path(__file__).parent / 'test-bandwidth.esdl')),
-            EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv",  "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power"], str(Path(__file__).parent / 'test-variable-peak-tariff.esdl')),
-            EmsTestParam("1412f71f-a9d2-4c66-a834-385cf91c3767", ["aggregated_active_power", "aggregated_reactive_power", "dispatch_pv", "heat_power_to_buffer_hhp", "heat_power_to_house_hhp"], str(Path(__file__).parent / 'test-variable-peak-tariff.esdl')),
-            EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv",  "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power"], str(Path(__file__).parent / 'test-peak-tariff.esdl')),
-            EmsTestParam("1412f71f-a9d2-4c66-a834-385cf91c3767", ["aggregated_active_power", "aggregated_reactive_power", "dispatch_pv", "heat_power_to_buffer_hhp", "heat_power_to_house_hhp"], str(Path(__file__).parent / 'test-peak-tariff.esdl')),
-            EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv",  "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power"], str(Path(__file__).parent / 'test-no-tariff.esdl'), False),
-            EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv",  "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power"], str(Path(__file__).parent / 'test-no-tariff.esdl'), True)
+            EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv",  "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-bandwidth.esdl')),
+            EmsTestParam("1412f71f-a9d2-4c66-a834-385cf91c3767", ["aggregated_active_power", "aggregated_reactive_power", "dispatch_pv", "heat_power_to_buffer_hhp", "heat_power_to_house_hhp", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-bandwidth.esdl')),
+            EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv",  "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-variable-peak-tariff.esdl')),
+            EmsTestParam("1412f71f-a9d2-4c66-a834-385cf91c3767", ["aggregated_active_power", "aggregated_reactive_power", "dispatch_pv", "heat_power_to_buffer_hhp", "heat_power_to_house_hhp", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-variable-peak-tariff.esdl')),
+            EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv",  "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-peak-tariff.esdl')),
+            EmsTestParam("1412f71f-a9d2-4c66-a834-385cf91c3767", ["aggregated_active_power", "aggregated_reactive_power", "dispatch_pv", "heat_power_to_buffer_hhp", "heat_power_to_house_hhp", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-peak-tariff.esdl')),
+            EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv",  "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-no-tariff.esdl'), 0),
+            EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv",  "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-no-tariff.esdl'), 2*1.0e-6)
         ]
 
         for i in range(0, len(test_examples)):
@@ -88,18 +88,17 @@ class Test(unittest.TestCase):
                 service = self.init_e_connection_service(energy_system)
 
                 edemand_param = self.get_default_set_params()
-                edemand_param["congestion_signal"] = test_param.congestion_signal_active
+                edemand_param["congestion_signal"] = test_param.congestion_signal_kw
 
                 # Execute
                 ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 15, 0), TimeStepInformation(1,96), test_param.esdl_id, energy_system)
-
                 for expected_outcome in test_param.expected_outcomes:
                     self.assertIn(expected_outcome, ret_val.keys())
 
     def test_different_assets(self):
         test_examples = [
-            EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv", "active_power_to_charge", "aggregated_active_power", "aggregated_reactive_power"], str(Path(__file__).parent / 'test-battery.esdl')),
-            EmsTestParam("1412f71f-a9d2-4c66-a834-385cf91c3767", ["aggregated_active_power", "aggregated_reactive_power", "dispatch_pv", "active_power_to_charge"], str(Path(__file__).parent / 'test-battery.esdl')),
+            EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv", "active_power_to_charge", "aggregated_active_power", "aggregated_reactive_power", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-battery.esdl')),
+            EmsTestParam("1412f71f-a9d2-4c66-a834-385cf91c3767", ["aggregated_active_power", "aggregated_reactive_power", "dispatch_pv", "active_power_to_charge", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-battery.esdl')),
         ]
         for i in range(0, len(test_examples)):
             with self.subTest(i=i, params = test_examples[i]):
@@ -149,14 +148,22 @@ class Test(unittest.TestCase):
 
         expected_active_power_single_phase = edemand_param['active_power'][0] / 3
         expected_reactive_power_single_phase = edemand_param['reactive_power'][0] / 3
+        expected_predicted_active_power_single_phase = edemand_param['active_power'][1] / 3
+        expected_predicted_reactive_power_single_phase = edemand_param['reactive_power'][1] / 3
         expected_active_power = [expected_active_power_single_phase, expected_active_power_single_phase, expected_active_power_single_phase]
         expected_reactive_power = [expected_reactive_power_single_phase, expected_reactive_power_single_phase, expected_reactive_power_single_phase]
+        expected_predicted_active_power = [expected_predicted_active_power_single_phase, expected_predicted_active_power_single_phase, expected_predicted_active_power_single_phase]
+        expected_predicted_reactive_power = [expected_predicted_reactive_power_single_phase, expected_predicted_reactive_power_single_phase, expected_predicted_reactive_power_single_phase]
 
         for key in ret_val.keys():
             if key == "aggregated_active_power":
                 self.assertListEqual(ret_val[key], expected_active_power)
             elif key == "aggregated_reactive_power":
                 self.assertListEqual(ret_val[key], expected_reactive_power)
+            elif key == "predicted_aggregated_active_power":
+                self.assertListEqual(ret_val[key], expected_predicted_active_power)
+            elif key == "predicted_aggregated_reactive_power":
+                self.assertListEqual(ret_val[key], expected_predicted_reactive_power)
             else:
                 self.assertEqual(ret_val[key], 0.0)
 

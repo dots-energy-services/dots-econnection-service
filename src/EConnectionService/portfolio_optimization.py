@@ -20,6 +20,7 @@ class PortfolioOptimizationProblem:
 
     def create_time(self, time_params: dict):
         self.model.time_index_p = pyo.RangeSet(0, time_params['n_steps'] - 1)
+        self.model.time_index_p1 = pyo.RangeSet(0, 0)
         self.model.time_index_soc = pyo.RangeSet(0, time_params['n_steps'])
         self.model.dt = pyo.Param(initialize=time_params['dt'] / 3600)
         self.model.time_step_nr = pyo.Param(initialize=time_params['time_step_nr'])
@@ -640,12 +641,13 @@ class PortfolioOptimizationProblem:
         column = self.highspy_interface.getColByName(f"{name}({index})")
         return self.solution.col_value[column[1]]
     
-    def get_model_parameter_value(self, name: str):
+    def get_model_parameter_value(self, name: str, at_time_index = 0):
         component = self.model.find_component(name)
         if isinstance(component, IndexedParam):
-            value_to_return = next(iter(component.values()))
-            LOGGER.info(f"Parameter {name} from model has value: {value_to_return}")
-            return pyo.value(value_to_return)
+            for i, val in enumerate(component.values()):
+                if i == at_time_index:
+                    LOGGER.info(f"Parameter {name} from model has value: {val}")
+                    return pyo.value(val)
         else:
             raise TypeError(f'Component {name} should be IndexedVar or IndexedParam')
         
@@ -662,7 +664,7 @@ class PortfolioOptimizationProblem:
         column = self.highspy_interface.getColByName(f"{name}")
         return self.solution.col_value[column[1]]
 
-    def create_objective_function(self, is_grid_tariff: bool, congestion_signal : bool = False):
+    def create_objective_function(self, is_grid_tariff: bool):
         def total_costs(m):
             # minimize slack variables to minimize constraint violation
             if self.has_heat_pump:
@@ -673,9 +675,6 @@ class PortfolioOptimizationProblem:
             if is_grid_tariff:
                 costs += m.grid_costs
 
-            if congestion_signal:
-                congestion_signal_constant = 5000
-                costs += congestion_signal_constant * (m.buy_costs + m.sell_rev)
             return costs
 
         self.model.objective_function = pyo.Objective(sense=pyo.minimize, expr=total_costs)
@@ -739,7 +738,7 @@ class PortfolioOptimizationProblem:
             rule=lambda m: m.buy_costs == sum(buy_prices[t] * m.e_buy[t] for t in m.time_index_p))
 
 
-    def solve(self, mip_gap, show_logs=False):
+    def solve(self, mip_gap):
         filename_path = Path(__file__).parent / "model.mps"
         filename = str(filename_path)
         self.model.write(filename, io_options={'symbolic_solver_labels': True})
@@ -764,29 +763,47 @@ class PortfolioOptimizationProblem:
         os.remove(filename)
 
 
-    def create_static_bw_tariff(self,
+    def _create_static_bw_tariff(self,
                                 static_bw_price_low: float,
                                 static_bw_price_high: float,
-                                static_bw_power: float):
+                                static_bw_power: float,
+                                time_index : pyo.RangeSet):
 
         self.model.static_bw_price_low = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_low)
         self.model.static_bw_price_high = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_high)
         self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_power)
-        self.model.static_bw_costs = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+
+        self.model.static_bw_costs = pyo.Var(time_index, within=pyo.NonNegativeReals, initialize=0)
         self.model.grid_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
+
 
         # Constraints
         self.model.con_bw_low = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
+            time_index, rule=lambda m, t:
             # eur/kWh x kWh
             m.static_bw_price_high * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
         self.model.con_bw_high = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
+            time_index, rule=lambda m, t:
             # eur/kWh x kWh
             m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
-        self.model.con_grid_costs = pyo.Constraint(rule=lambda m: m.grid_costs == sum(m.static_bw_costs[t] for t in m.time_index_p))
+        self.model.con_grid_costs = pyo.Constraint(
+            rule=lambda m: m.grid_costs == sum(m.static_bw_costs[t] for t in time_index)
+        )
+
+    def create_static_bw_tariff_full_horizon(self,
+                                    static_bw_price_low: float,
+                                    static_bw_price_high: float,
+                                    static_bw_power: float):
+
+        self._create_static_bw_tariff(static_bw_price_low, static_bw_price_high, static_bw_power, self.model.time_index_p)
+
+    def create_static_bw_tariff_1_time_step(self,
+                                        static_bw_power: float):
+
+        big_costs_constant = 5000
+        self._create_static_bw_tariff(big_costs_constant, big_costs_constant, static_bw_power, self.model.time_index_p1)
 
 
     def create_variable_tariff(self, variable_tariff: list):
