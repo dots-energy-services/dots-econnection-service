@@ -12,7 +12,7 @@ from EConnectionService.esdl_entity_parameter_parser import EVParameters, EsdlEn
 
 
 class PortfolioOptimizationProblem:
-    def __init__(self, esdl_entity_parser : EsdlEntityParameterParser):
+    def __init__(self, esdl_entity_parser : EsdlEntityParameterParser, highspy_interface : highspy.Highs):
         self.model = pyo.ConcreteModel()
         self.has_heat_pump = False
         self.esdl_entity_parser = esdl_entity_parser

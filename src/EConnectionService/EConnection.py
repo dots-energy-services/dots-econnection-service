@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
+from datetime import datetime, timedelta
 import highspy
 import helics as h
+from dots_infrastructure.EsdlProfileParsingClasses import ParsedTimeSeriesProfile
 from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation, TimeRequestType
 from dots_infrastructure.HelicsFederateHelpers import HelicsSimulationExecutor
 from dots_infrastructure.Logger import LOGGER
-from esdl import esdl, EnergySystem
+from esdl import HeatDemandTypeEnum, HeatingDemand, esdl, EnergySystem
 
 import json
 import numpy as np
@@ -19,6 +20,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
     def __init__(self):
         super().__init__()
+        self.highspy_interface = highspy.Highs()
 
         subscriptions_values = [
             SubscriptionDescription(esdl_type="EnvironmentalProfiles",
@@ -323,7 +325,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         asset_portfolio = self.asset_portfolios[esdl_id]
 
         # Create optimization problem
-        problem = PortfolioOptimizationProblem(self.esdl_entity_parser)
+        problem = PortfolioOptimizationProblem(self.esdl_entity_parser, self.highspy_interface)
         time_params = {'n_steps': self.optimization_horizon,
                        'dt': self.ems_time_step_seconds,
                        'time_step_nr': time_step_nr}
@@ -367,8 +369,13 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                 dhw_temperature = get_single_param_with_name(param_dict, "dhw_temperature")
                 dhw_temperature = round(dhw_temperature, self.round_decimals)
 
-                dhw_profile = heat_pump.port[0].profile[0].values  # assumes dhw profile is saved here
-                dhw_profile_slice = dhw_profile[time_step_nr - 1:time_step_nr - 1 + self.optimization_horizon]
+                dhw_demand = self.get_hot_water_demand_profile(heat_pump)
+                dhw_profile = dhw_demand.port[1].profile[0]
+                profile = ParsedTimeSeriesProfile(dhw_profile)
+                from_date = simulation_time
+                to_date = simulation_time + timedelta(seconds=self.ems_time_step_seconds * self.optimization_horizon)
+                dhw_profile_slice = profile.get_data_in_timeseries_format(from_date, to_date, self.ems_time_step_seconds)
+
                 dhw_profile_slice = [round(value, self.round_decimals) for value in dhw_profile_slice]
 
                 problem.create_heat_pump(heat_pump,
@@ -419,7 +426,8 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             problem.create_static_bw_tariff_full_horizon(self.static_bw_price_low,
                                             self.static_bw_price_high,
                                             self.static_bw_powers[esdl_id])
-        if congestion_signal > 0:
+
+        if congestion_signal > 0 and self.congestion_management_active:
             is_grid_tariff = True
             problem.create_static_bw_tariff_1_time_step(congestion_signal)
         if self.is_variable_tariff:
@@ -433,6 +441,13 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         problem.create_objective_function(is_grid_tariff)
 
         return problem
+
+    def get_hot_water_demand_profile(self, heat_pump) -> HeatingDemand:
+        connected_ports = [port for port in heat_pump.port if len(port.connectedTo) > 0]
+        for connected_port in connected_ports:
+            for entity in connected_port.connectedTo:
+                if isinstance(entity.eContainer(), HeatingDemand) and entity.eContainer().type == HeatDemandTypeEnum.from_string('HOT_TAPWATER'):
+                    return entity.eContainer()
 
     def get_return_values_no_ems(self, param_dict: dict, esdl_id: str):
         ret_val = {'dispatch_ev': 0.0, 'dispatch_pv': -0.0, 'heat_power_to_tank_dhw': 0.0, 'heat_power_to_buffer': 0.0,
@@ -623,6 +638,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         self.is_static_bw_tariff = False
         self.is_variable_tariff = False
         self.is_variable_peak_tariff = False
+        self.congestion_management_active = False
         self.is_feed_in_tariff = False
         self.feed_in_price = None
         for measure in measures.measure:
@@ -652,9 +668,15 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                 self.is_feed_in_tariff = True
                 self.feed_in_price = measure.costInformation.variableOperationalCosts.value
 
+            if measure.name == 'congestion_management_active':
+                self.congestion_management_active = True
+
     def set_got_ems(self, esdl_id: str):
-        description_dict = json.loads(self.esdl_objects[esdl_id].description)
-        self.got_ems[esdl_id] = description_dict['got_ems']
+        try:
+            description_dict = json.loads(self.esdl_objects[esdl_id].description)
+            self.got_ems[esdl_id] = description_dict['got_ems']
+        except json.JSONDecodeError:
+            self.got_ems[esdl_id] = True
 
     def set_energy_contract_data(self, esdl_id: str):
         description_dict = json.loads(self.esdl_objects[esdl_id].description)
