@@ -672,8 +672,11 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                 self.congestion_management_active = True
 
     def set_got_ems(self, esdl_id: str):
-        description_dict = json.loads(self.esdl_objects[esdl_id].description)
-        self.got_ems[esdl_id] = description_dict['got_ems']
+        try:
+            description_dict = json.loads(self.esdl_objects[esdl_id].description)
+            self.got_ems[esdl_id] = description_dict['got_ems']
+        except json.JSONDecodeError:
+            self.got_ems[esdl_id] = True
 
     def set_energy_contract_data(self, esdl_id: str):
         description_dict = json.loads(self.esdl_objects[esdl_id].description)
