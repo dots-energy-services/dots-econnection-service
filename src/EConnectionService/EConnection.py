@@ -20,6 +20,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
     def __init__(self):
         super().__init__()
+        self.highspy_interface = highspy.Highs()
 
         subscriptions_values = [
             SubscriptionDescription(esdl_type="EnvironmentalProfiles",
@@ -324,7 +325,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         asset_portfolio = self.asset_portfolios[esdl_id]
 
         # Create optimization problem
-        problem = PortfolioOptimizationProblem(self.esdl_entity_parser)
+        problem = PortfolioOptimizationProblem(self.esdl_entity_parser, self.highspy_interface)
         time_params = {'n_steps': self.optimization_horizon,
                        'dt': self.ems_time_step_seconds,
                        'time_step_nr': time_step_nr}
@@ -425,7 +426,8 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             problem.create_static_bw_tariff_full_horizon(self.static_bw_price_low,
                                             self.static_bw_price_high,
                                             self.static_bw_powers[esdl_id])
-        if congestion_signal > 0:
+
+        if congestion_signal > 0 and self.congestion_management_active:
             is_grid_tariff = True
             problem.create_static_bw_tariff_1_time_step(congestion_signal)
         if self.is_variable_tariff:
@@ -636,6 +638,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         self.is_static_bw_tariff = False
         self.is_variable_tariff = False
         self.is_variable_peak_tariff = False
+        self.congestion_management_active = False
         self.is_feed_in_tariff = False
         self.feed_in_price = None
         for measure in measures.measure:
@@ -664,6 +667,9 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                 LOGGER.info("Feed-in tariff detected")
                 self.is_feed_in_tariff = True
                 self.feed_in_price = measure.costInformation.variableOperationalCosts.value
+
+            if measure.name == 'congestion_management_active':
+                self.congestion_management_active = True
 
     def set_got_ems(self, esdl_id: str):
         description_dict = json.loads(self.esdl_objects[esdl_id].description)

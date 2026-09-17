@@ -12,11 +12,11 @@ from EConnectionService.esdl_entity_parameter_parser import EVParameters, EsdlEn
 
 
 class PortfolioOptimizationProblem:
-    def __init__(self, esdl_entity_parser : EsdlEntityParameterParser):
+    def __init__(self, esdl_entity_parser : EsdlEntityParameterParser, highspy_interface : highspy.Highs):
         self.model = pyo.ConcreteModel()
         self.has_heat_pump = False
         self.esdl_entity_parser = esdl_entity_parser
-        self.highspy_interface = highspy.Highs()
+        self.highspy_interface = highspy_interface
 
     def create_time(self, time_params: dict):
         self.model.time_index_p = pyo.RangeSet(0, time_params['n_steps'] - 1)
