@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
-from dots_infrastructure.EsdlProfileParsingClasses import ParsedTimeSeriesProfile
 import highspy
 import helics as h
+from dots_infrastructure.EsdlProfileParsingClasses import ParsedTimeSeriesProfile
 from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation, TimeRequestType
 from dots_infrastructure.HelicsFederateHelpers import HelicsSimulationExecutor
 from dots_infrastructure.Logger import LOGGER
