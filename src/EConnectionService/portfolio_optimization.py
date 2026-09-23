@@ -36,12 +36,20 @@ class PortfolioOptimizationProblem:
         # change arrival/departure ptus based on current simulated time-step
         # e.g. we work in relative ptus from the current simulated ptu
         time_step_nr = pyo.value(self.model.time_step_nr)
-        arrival_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
-        departure_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.departure_ptus]
+        arrival_ptus = [ptu - time_step_nr for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
+        departure_ptus = [ptu - time_step_nr for ptu in ev_params.departure_ptus.keys()]
+        departure_ptus_dict = {ptu - time_step_nr: val for ptu, val in ev_params.departure_ptus.items()}
+
+        LOGGER.debug(f"arrival ptus: {ev_params.arrival_ptus}")
+        LOGGER.debug(f"departure ptus: {ev_params.departure_ptus}")
+        LOGGER.debug(f"current soc kwh: {ev_params.current_soc_kwh}")
+        LOGGER.debug(f"max power kw: {ev_params.max_power_kw}")
+        LOGGER.debug(f"max soc kwh: {ev_params.max_soc_kwh}")
+        LOGGER.debug(f"efficiency: {ev_params.efficiency}")
 
         # Parameters
         # Numbers
-        self.model.capacity_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.max_soc_kwh)
+
         self.model.init_soc_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.current_soc_kwh)
 
         self.model.ch_eff_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.efficiency)
@@ -49,19 +57,33 @@ class PortfolioOptimizationProblem:
 
         # Arrays
         # Create availability list
-        number_of_ptus = len(self.model.time_index_p)
+        number_of_ptus = len(self.model.time_index_p) + 1
         availability_ev = number_of_ptus * [0]
+        max_soc_ev = [0 for i in self.model.time_index_soc]
         for arrival_ptu, departure_ptu in zip(arrival_ptus, departure_ptus):
-            # Add 1 to departure, because by convention the car can be charged during the departure ptu
-            for ptu in range(max(0, arrival_ptu), max(0, min(departure_ptu, number_of_ptus))):
+
+            for ptu in range(max(0, arrival_ptu), max(0, min(departure_ptu + 1, number_of_ptus)) ):
                 availability_ev[ptu] = 1
+                max_soc_ev[ptu] = departure_ptus_dict[departure_ptu]
+
         self.model.availability_ev = pyo.Param(self.model.time_index_p, within=pyo.Binary,
-                                               initialize=self.it2dict(availability_ev))
+                                               initialize=self.it2dict(availability_ev[:-1]))
+
+        self.model.capacity_ev = pyo.Param(self.model.time_index_soc, within=pyo.NonNegativeReals, initialize=self.it2dict(max_soc_ev))
 
         # Variables
         self.model.p_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.soc_ev = pyo.Var(self.model.time_index_soc, within=pyo.NonNegativeReals,
                                     initialize=self.model.init_soc_ev)
+
+        self.model.con_soc_ev_0_low = pyo.Constraint(
+            self.model.time_index_p1, rule=lambda m, t:
+            m.soc_ev[t] >= ev_params.current_soc_kwh
+        )
+        self.model.con_soc_ev_0_up = pyo.Constraint(
+            self.model.time_index_p1, rule=lambda m, t:
+            m.soc_ev[t] <= ev_params.current_soc_kwh + m.p_ev[t] * m.dt * m.ch_eff_ev
+        )
 
         self.model.con_ev_ch_limit = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
@@ -75,18 +97,13 @@ class PortfolioOptimizationProblem:
 
         self.model.con_soc_ev_max = pyo.Constraint(
             self.model.time_index_soc, rule=lambda m, t:
-            m.soc_ev[t] <= m.capacity_ev
-        )
-
-        self.model.con_soc_ev_init = pyo.Constraint(
-            self.model.time_index_soc, rule=lambda m, t:
-            m.soc_ev[m.time_index_soc.first()] == m.init_soc_ev
+            m.soc_ev[t] <= m.capacity_ev[t]
         )
 
         def arrival_constraint_f(model, t):
-            if t in arrival_ptus:
+            if t in arrival_ptus and t > 0:
                 arrival_soc = 0
-                return model.soc_ev[t] == arrival_soc
+                return model.soc_ev[t-1] == arrival_soc
             else:
                 return pyo.Constraint.Skip
 
@@ -94,7 +111,7 @@ class PortfolioOptimizationProblem:
 
         def departure_constraint_f_up(model, t):
             if t in departure_ptus:
-                departure_soc = ev_params.max_soc_kwh
+                departure_soc = departure_ptus_dict[t]
                 eps = 1.0e-3
                 return model.soc_ev[t] <= departure_soc + eps
             else:
@@ -102,20 +119,20 @@ class PortfolioOptimizationProblem:
 
         def departure_constraint_f_low(model, t):
             if t in departure_ptus:
-                departure_soc = ev_params.max_soc_kwh
+                departure_soc = departure_ptus_dict[t]
                 eps = 1.0e-3
                 return model.soc_ev[t] >= departure_soc - eps
             else:
                 return pyo.Constraint.Skip
 
-        self.model.con_soc_ev_dep_up = pyo.Constraint(self.model.time_index_soc, rule=departure_constraint_f_up)
-        self.model.con_soc_ev_dep_low = pyo.Constraint(self.model.time_index_soc, rule=departure_constraint_f_low)
+        self.model.con_soc_ev_dep_up = pyo.Constraint(self.model.time_index_p, rule=departure_constraint_f_up)
+        self.model.con_soc_ev_dep_low = pyo.Constraint(self.model.time_index_p, rule=departure_constraint_f_low)
 
         def soc_update_f(model, t):
-            if (any(arr_ptu <= t < dep_ptu for arr_ptu, dep_ptu in
+            if (any(arr_ptu <= t <= dep_ptu for arr_ptu, dep_ptu in
                     zip(arrival_ptus, departure_ptus))) \
-                    and (t < model.time_index_soc.last()):
-                return model.soc_ev[t + 1] == model.soc_ev[t] + model.p_ev[t] * model.dt  # m.ch_eff_ev
+                    and (t < model.time_index_soc.last()) and t > 0:
+                return model.soc_ev[t] == model.soc_ev[t-1] + model.p_ev[t] * model.dt * model.ch_eff_ev
             else:
                 return pyo.Constraint.Skip
 

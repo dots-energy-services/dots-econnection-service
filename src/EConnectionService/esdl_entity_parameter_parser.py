@@ -5,6 +5,7 @@ import esdl
 from dataclasses import dataclass
 
 from dots_infrastructure.DataClasses import TimeStepInformation
+from dots_infrastructure.Logger import LOGGER
 
 @dataclass
 class BuildingParameters:
@@ -51,7 +52,7 @@ class HeatPumpParameters(GeneralHeatpumpParameters):
 @dataclass
 class EVParameters:
     arrival_ptus : List[int]
-    departure_ptus : List[int]
+    departure_ptus : dict[int, float]
     max_soc_kwh : float
     max_power_kw : float
     efficiency : float
@@ -143,7 +144,7 @@ class EsdlEntityParameterParser:
             )
         return self._heatpump_cache[key]
 
-    def get_ev_parameters(self, ev : esdl.EVChargingStation, simulation_start_time : datetime, simulation_duration_in_seconds : int, time_step_in_seconds : int, current_simulation_time : datetime) -> EVParameters:
+    def get_ev_parameters(self, ev : esdl.EVChargingStation, simulation_start_time : datetime, simulation_duration_in_seconds : int, time_step_in_seconds : int, current_simulation_time : datetime, timestep_information : TimeStepInformation) -> EVParameters:
         key = ev.id
         ev_profile_port = next(port for port in ev.port if any(isinstance(connected_to.eContainer(), esdl.MobilityDemand) for connected_to in port.connectedTo))
         mobility_demand : esdl.MobilityDemand = next(obj.eContainer() for obj in ev_profile_port.connectedTo if isinstance(obj.eContainer(), esdl.MobilityDemand))
@@ -152,17 +153,17 @@ class EsdlEntityParameterParser:
         if key not in self._ev_cache:
 
             arrival_ptus = []
-            departure_ptus = []
+            departure_ptus = {}
             current_datetime = simulation_start_time
             end_date_time = simulation_start_time + timedelta(seconds = simulation_duration_in_seconds)
-            ptu = 0
+            ptu = 1
             while current_datetime <= end_date_time:
-                arrival_ptu = any(elem.from_ for elem in datetime_profile.element if current_datetime <= elem.from_ < current_datetime + timedelta(seconds=time_step_in_seconds) )
-                departure_ptu = any(elem.to for elem in datetime_profile.element if current_datetime <= elem.to < current_datetime + timedelta(seconds=time_step_in_seconds) )
+                arrival_ptu = any(current_datetime <= elem.from_ < current_datetime + timedelta(seconds=time_step_in_seconds)  for elem in datetime_profile.element)
+                profile_elem = next((elem for elem in datetime_profile.element if current_datetime <= elem.to < current_datetime + timedelta(seconds=time_step_in_seconds)), None)
                 if arrival_ptu:
                     arrival_ptus.append(ptu)
-                if departure_ptu and len(departure_ptus) == len(arrival_ptus) - 1:
-                    departure_ptus.append(ptu)
+                if profile_elem is not None and len(departure_ptus) == len(arrival_ptus) - 1:
+                    departure_ptus[ptu] = profile_elem.value
                 ptu += 1
                 current_datetime = current_datetime + timedelta(seconds=time_step_in_seconds)
 
@@ -177,17 +178,20 @@ class EsdlEntityParameterParser:
                 current_soc_kwh=0
             )
 
-        active_profile_elem = next((profile_elem for profile_elem in datetime_profile.element if profile_elem.from_ <= current_simulation_time <= profile_elem.to), None)
+        active_profile_elem = next((profile_elem for profile_elem in datetime_profile.element if profile_elem.from_ <= current_simulation_time <= profile_elem.to and profile_elem.from_ >= simulation_start_time), None)
         max_soc_kwh = 0
         if active_profile_elem is not None:
             max_soc_kwh = active_profile_elem.value
 
         ev_params = self._ev_cache[key]
         ev_params.max_soc_kwh = max_soc_kwh
+        eps = 1.0e-3
+        if timestep_information.current_time_step_number in ev_params.arrival_ptus or timestep_information.current_time_step_number - 1 in ev_params.departure_ptus or -eps < ev_params.current_soc_kwh < 0:
+            ev_params.current_soc_kwh = 0
         return ev_params
 
-    def set_soc_ev(self, ev_charginstation : esdl.EVChargingStation, current_soc_kwh : float):
-        self._ev_cache[ev_charginstation.id].current_soc_kwh = current_soc_kwh
+    def set_soc_ev(self, ev_charginstation : esdl.EVChargingStation, to_charge_soc_kwh : float):
+        self._ev_cache[ev_charginstation.id].current_soc_kwh += to_charge_soc_kwh
 
     def get_battery_parameters(self, battery: esdl.Battery) -> BatteryParameters:
         key = battery.id
