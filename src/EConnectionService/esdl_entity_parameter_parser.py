@@ -4,7 +4,8 @@ from typing import List
 import esdl
 from dataclasses import dataclass
 
-from dots_infrastructure.DataClasses import TimeStepInformation
+from dots_infrastructure.Logger import LOGGER
+
 
 @dataclass
 class BuildingParameters:
@@ -184,6 +185,7 @@ class EsdlEntityParameterParser:
 
         ev_params = self._ev_cache[key]
         ev_params.max_soc_kwh = max_soc_kwh
+        LOGGER.debug(f"Current state of charge ev: {self._ev_cache[key].current_soc_kwh}")
         return ev_params
 
     def set_soc_ev(self, ev_charginstation : esdl.EVChargingStation, current_soc_kwh : float):
