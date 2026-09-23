@@ -36,7 +36,7 @@ class PortfolioOptimizationProblem:
         # change arrival/departure ptus based on current simulated time-step
         # e.g. we work in relative ptus from the current simulated ptu
         time_step_nr = pyo.value(self.model.time_step_nr)
-        arrival_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
+        arrival_ptus = [ptu - (time_step_nr) for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
         departure_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.departure_ptus]
 
         LOGGER.debug(f"arrival ptus: {ev_params.arrival_ptus}")
