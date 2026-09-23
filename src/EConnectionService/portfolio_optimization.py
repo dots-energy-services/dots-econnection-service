@@ -36,8 +36,8 @@ class PortfolioOptimizationProblem:
         # change arrival/departure ptus based on current simulated time-step
         # e.g. we work in relative ptus from the current simulated ptu
         time_step_nr = pyo.value(self.model.time_step_nr)
-        arrival_ptus = [ptu - time_step_nr for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
-        departure_ptus = [ptu - time_step_nr for ptu in ev_params.departure_ptus]
+        arrival_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
+        departure_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.departure_ptus]
 
         LOGGER.debug(f"arrival ptus: {ev_params.arrival_ptus}")
         LOGGER.debug(f"departure ptus: {ev_params.departure_ptus}")
@@ -60,7 +60,7 @@ class PortfolioOptimizationProblem:
         availability_ev = number_of_ptus * [0]
         for arrival_ptu, departure_ptu in zip(arrival_ptus, departure_ptus):
             # Add 1 to departure and arrival, because by convention the car can be charged during the departure ptu
-            for ptu in range(max(0, arrival_ptu), max(0, min(departure_ptu + 1, number_of_ptus)) ):
+            for ptu in range(max(0, arrival_ptu), max(0, min(departure_ptu, number_of_ptus)) ):
                 availability_ev[ptu] = 1
         self.model.availability_ev = pyo.Param(self.model.time_index_p, within=pyo.Binary,
                                                initialize=self.it2dict(availability_ev))
@@ -122,7 +122,7 @@ class PortfolioOptimizationProblem:
             if (any(arr_ptu <= t < dep_ptu for arr_ptu, dep_ptu in
                     zip(arrival_ptus, departure_ptus))) \
                     and (t < model.time_index_soc.last()):
-                return model.soc_ev[t + 1] == model.soc_ev[t] + model.p_ev[t] * model.dt  # m.ch_eff_ev
+                return model.soc_ev[t + 1] == model.soc_ev[t] + model.p_ev[t] * model.dt  * model.ch_eff_ev
             else:
                 return pyo.Constraint.Skip
 
