@@ -399,7 +399,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         if 'EVChargingStation' in asset_portfolio:
             ev_charging_station = asset_portfolio['EVChargingStation']['esdl_object']
-            ev_params = self.esdl_entity_parser.get_ev_parameters(ev_charging_station, self.simulator_configuration.start_time, self.simulator_configuration.simulation_duration_in_seconds, self.ems_time_step_seconds, simulation_time)
+            ev_params = self.esdl_entity_parser.get_ev_parameters(ev_charging_station, self.simulator_configuration.start_time, self.simulator_configuration.simulation_duration_in_seconds, self.ems_time_step_seconds, simulation_time, time_step_number)
             problem.create_ev_charging_station(ev_params)
 
         # Create energy balance constraints, grid tariff constraints and the objective function

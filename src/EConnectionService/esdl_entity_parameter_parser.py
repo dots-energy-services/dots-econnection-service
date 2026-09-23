@@ -4,6 +4,8 @@ from typing import List
 import esdl
 from dataclasses import dataclass
 
+from dots_infrastructure.DataClasses import TimeStepInformation
+
 @dataclass
 class BuildingParameters:
     C_in_kwh : float
@@ -141,7 +143,7 @@ class EsdlEntityParameterParser:
             )
         return self._heatpump_cache[key]
 
-    def get_ev_parameters(self, ev : esdl.EVChargingStation, simulation_start_time : datetime, simulation_duration_in_seconds : int, time_step_in_seconds : int, current_simulation_time : datetime) -> EVParameters:
+    def get_ev_parameters(self, ev : esdl.EVChargingStation, simulation_start_time : datetime, simulation_duration_in_seconds : int, time_step_in_seconds : int, current_simulation_time : datetime, timestep_information : TimeStepInformation) -> EVParameters:
         key = ev.id
         ev_profile_port = next(port for port in ev.port if any(isinstance(connected_to.eContainer(), esdl.MobilityDemand) for connected_to in port.connectedTo))
         mobility_demand : esdl.MobilityDemand = next(obj.eContainer() for obj in ev_profile_port.connectedTo if isinstance(obj.eContainer(), esdl.MobilityDemand))
@@ -182,6 +184,8 @@ class EsdlEntityParameterParser:
 
         ev_params = self._ev_cache[key]
         ev_params.max_soc_kwh = max_soc_kwh
+        if timestep_information.current_time_step_number in ev_params.arrival_ptus:
+            ev_params.current_soc_kwh = 0
         return ev_params
 
     def set_soc_ev(self, ev_charginstation : esdl.EVChargingStation, current_soc_kwh : float):
