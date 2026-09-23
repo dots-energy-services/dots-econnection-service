@@ -177,7 +177,7 @@ class EsdlEntityParameterParser:
                 current_soc_kwh=0
             )
 
-        active_profile_elem = next((profile_elem for profile_elem in datetime_profile.element if profile_elem.from_ <= current_simulation_time <= profile_elem.to), None)
+        active_profile_elem = next((profile_elem for profile_elem in datetime_profile.element if profile_elem.from_ <= current_simulation_time <= profile_elem.to and profile_elem.from_ >= simulation_start_time), None)
         max_soc_kwh = 0
         if active_profile_elem is not None:
             max_soc_kwh = active_profile_elem.value
