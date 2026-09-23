@@ -39,6 +39,13 @@ class PortfolioOptimizationProblem:
         arrival_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
         departure_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.departure_ptus]
 
+        LOGGER.debug(f"arrival ptus: {ev_params.arrival_ptus}")
+        LOGGER.debug(f"departure ptus: {ev_params.departure_ptus}")
+        LOGGER.debug(f"current soc kwh: {ev_params.current_soc_kwh}")
+        LOGGER.debug(f"max power kw: {ev_params.max_power_kw}")
+        LOGGER.debug(f"max soc kwh: {ev_params.max_soc_kwh}")
+        LOGGER.debug(f"efficiency: {ev_params.efficiency}")
+
         # Parameters
         # Numbers
         self.model.capacity_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.max_soc_kwh)
