@@ -573,7 +573,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             p_ev_w = problem.get_first_value_from_component('p_ev') * 1000
             ret_val['dispatch_ev'] = p_ev_w
             ev = asset_portfolio['EVChargingStation']['esdl_object']
-            soc_ev = problem.get_value_from_component_at_time_index('soc_ev', 1)
+            soc_ev = p_ev_w / 1000 * (self.ems_time_step_seconds/3600)
             self.esdl_entity_parser.set_soc_ev(ev, soc_ev)
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'EVChargingStation', p_ev_w)
             aggregated_active_power += p

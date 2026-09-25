@@ -49,7 +49,7 @@ class PortfolioOptimizationProblem:
 
         # Parameters
         # Numbers
-        
+
         self.model.init_soc_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.current_soc_kwh)
 
         self.model.ch_eff_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.efficiency)
@@ -76,6 +76,15 @@ class PortfolioOptimizationProblem:
         self.model.soc_ev = pyo.Var(self.model.time_index_soc, within=pyo.NonNegativeReals,
                                     initialize=self.model.init_soc_ev)
 
+        self.model.con_soc_ev_0_low = pyo.Constraint(
+            self.model.time_index_p1, rule=lambda m, t:
+            m.soc_ev[t] >= ev_params.current_soc_kwh
+        )
+        self.model.con_soc_ev_0_up = pyo.Constraint(
+            self.model.time_index_p1, rule=lambda m, t:
+            m.soc_ev[t] <= ev_params.current_soc_kwh + m.p_ev[t] * m.dt * m.ch_eff_ev
+        )
+
         self.model.con_ev_ch_limit = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
             m.p_ev[t] <= m.availability_ev[t] * m.max_ch_rate_ev  # is 0 if the car is not there
@@ -91,13 +100,8 @@ class PortfolioOptimizationProblem:
             m.soc_ev[t] <= m.capacity_ev[t]
         )
 
-        self.model.con_soc_ev_init = pyo.Constraint(
-            self.model.time_index_soc, rule=lambda m, t:
-            m.soc_ev[m.time_index_soc.first()] == m.init_soc_ev
-        )
-
         def arrival_constraint_f(model, t):
-            if t in arrival_ptus:
+            if t in arrival_ptus and t > 0:
                 arrival_soc = 0
                 return model.soc_ev[t-1] == arrival_soc
             else:
@@ -127,7 +131,7 @@ class PortfolioOptimizationProblem:
         def soc_update_f(model, t):
             if (any(arr_ptu <= t <= dep_ptu for arr_ptu, dep_ptu in
                     zip(arrival_ptus, departure_ptus))) \
-                    and (t < model.time_index_soc.last()):
+                    and (t < model.time_index_soc.last()) and t > 0:
                 return model.soc_ev[t] == model.soc_ev[t-1] + model.p_ev[t] * model.dt * model.ch_eff_ev
             else:
                 return pyo.Constraint.Skip
