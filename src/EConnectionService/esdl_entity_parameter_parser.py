@@ -189,8 +189,8 @@ class EsdlEntityParameterParser:
             ev_params.current_soc_kwh = 0
         return ev_params
 
-    def set_soc_ev(self, ev_charginstation : esdl.EVChargingStation, current_soc_kwh : float):
-        self._ev_cache[ev_charginstation.id].current_soc_kwh = current_soc_kwh
+    def set_soc_ev(self, ev_charginstation : esdl.EVChargingStation, to_charge_soc_kwh : float):
+        self._ev_cache[ev_charginstation.id].current_soc_kwh += to_charge_soc_kwh
 
     def get_battery_parameters(self, battery: esdl.Battery) -> BatteryParameters:
         key = battery.id
