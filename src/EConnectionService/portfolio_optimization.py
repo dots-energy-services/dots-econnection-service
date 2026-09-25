@@ -99,7 +99,7 @@ class PortfolioOptimizationProblem:
         def arrival_constraint_f(model, t):
             if t in arrival_ptus:
                 arrival_soc = 0
-                return model.soc_ev[t] == arrival_soc
+                return model.soc_ev[t-1] == arrival_soc
             else:
                 return pyo.Constraint.Skip
 
@@ -121,14 +121,14 @@ class PortfolioOptimizationProblem:
             else:
                 return pyo.Constraint.Skip
 
-        self.model.con_soc_ev_dep_up = pyo.Constraint(self.model.time_index_soc, rule=departure_constraint_f_up)
-        self.model.con_soc_ev_dep_low = pyo.Constraint(self.model.time_index_soc, rule=departure_constraint_f_low)
+        self.model.con_soc_ev_dep_up = pyo.Constraint(self.model.time_index_p, rule=departure_constraint_f_up)
+        self.model.con_soc_ev_dep_low = pyo.Constraint(self.model.time_index_p, rule=departure_constraint_f_low)
 
         def soc_update_f(model, t):
-            if (any(arr_ptu <= t < dep_ptu for arr_ptu, dep_ptu in
+            if (any(arr_ptu <= t <= dep_ptu for arr_ptu, dep_ptu in
                     zip(arrival_ptus, departure_ptus))) \
                     and (t < model.time_index_soc.last()):
-                return model.soc_ev[t + 1] == model.soc_ev[t] + model.p_ev[t] * model.dt  * model.ch_eff_ev
+                return model.soc_ev[t] == model.soc_ev[t-1] + model.p_ev[t] * model.dt * model.ch_eff_ev
             else:
                 return pyo.Constraint.Skip
 
