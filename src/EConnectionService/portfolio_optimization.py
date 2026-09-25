@@ -8,17 +8,19 @@ from pyomo.core.base.param import IndexedParam, ScalarParam
 import os
 import highspy
 
-from EConnectionService.esdl_entity_parameter_parser import EsdlEntityParameterParser
+from EConnectionService.esdl_entity_parameter_parser import EVParameters, EsdlEntityParameterParser
 
 
 class PortfolioOptimizationProblem:
-    def __init__(self, highspy_interface: highspy.Highs):
+    def __init__(self, esdl_entity_parser : EsdlEntityParameterParser, highspy_interface : highspy.Highs):
         self.model = pyo.ConcreteModel()
         self.has_heat_pump = False
+        self.esdl_entity_parser = esdl_entity_parser
         self.highspy_interface = highspy.Highs()
 
     def create_time(self, time_params: dict):
         self.model.time_index_p = pyo.RangeSet(0, time_params['n_steps'] - 1)
+        self.model.time_index_p1 = pyo.RangeSet(0, 0)
         self.model.time_index_soc = pyo.RangeSet(0, time_params['n_steps'])
         self.model.dt = pyo.Param(initialize=time_params['dt'] / 3600)
         self.model.time_step_nr = pyo.Param(initialize=time_params['time_step_nr'])
@@ -30,45 +32,58 @@ class PortfolioOptimizationProblem:
         p_edemand_dict = self.it2dict(active_power)
         self.model.p_edemand = pyo.Param(self.model.time_index_p, within=pyo.Reals, initialize=p_edemand_dict)
 
-    def create_ev_charging_station(self, ev_charging_station: esdl.EVChargingStation, state_of_charge: float):
+    def create_ev_charging_station(self, ev_params: EVParameters):
         # change arrival/departure ptus based on current simulated time-step
         # e.g. we work in relative ptus from the current simulated ptu
-        ev_params = EsdlEntityParameterParser.get_ev_parameters(ev_charging_station)
         time_step_nr = pyo.value(self.model.time_step_nr)
-        arrival_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
-        departure_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.departure_ptus]
+        arrival_ptus = [ptu - time_step_nr for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
+        departure_ptus = [ptu - time_step_nr for ptu in ev_params.departure_ptus.keys()]
+        departure_ptus_dict = {ptu - time_step_nr: val for ptu, val in ev_params.departure_ptus.items()}
 
-        # Correct for minor differences between the state of charge sent by ev charging station and the one in the model
-        if time_step_nr - 1 in arrival_ptus:
-            soc_index = arrival_ptus.index(time_step_nr - 1)
-            soc_upon_arrival = ev_params.arrival_socs_kwh[soc_index]
-            eps = 1.0e-3
-            if abs(soc_upon_arrival - state_of_charge) < eps:
-                state_of_charge = soc_upon_arrival
+        LOGGER.debug(f"arrival ptus: {ev_params.arrival_ptus}")
+        LOGGER.debug(f"departure ptus: {ev_params.departure_ptus}")
+        LOGGER.debug(f"current soc kwh: {ev_params.current_soc_kwh}")
+        LOGGER.debug(f"max power kw: {ev_params.max_power_kw}")
+        LOGGER.debug(f"max soc kwh: {ev_params.max_soc_kwh}")
+        LOGGER.debug(f"efficiency: {ev_params.efficiency}")
 
         # Parameters
         # Numbers
-        self.model.capacity_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.max_soc_kwh)
-        self.model.init_soc_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=state_of_charge)
+
+        self.model.init_soc_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.current_soc_kwh)
 
         self.model.ch_eff_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.efficiency)
         self.model.max_ch_rate_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.max_power_kw)
 
         # Arrays
         # Create availability list
-        number_of_ptus = len(self.model.time_index_p)
+        number_of_ptus = len(self.model.time_index_p) + 1
         availability_ev = number_of_ptus * [0]
+        max_soc_ev = [0 for i in self.model.time_index_soc]
         for arrival_ptu, departure_ptu in zip(arrival_ptus, departure_ptus):
-            # Add 1 to departure, because by convention the car can be charged during the departure ptu
-            for ptu in range(max(0, arrival_ptu), max(0, min(departure_ptu, number_of_ptus))):
+
+            for ptu in range(max(0, arrival_ptu), max(0, min(departure_ptu + 1, number_of_ptus)) ):
                 availability_ev[ptu] = 1
+                max_soc_ev[ptu] = departure_ptus_dict[departure_ptu]
+
         self.model.availability_ev = pyo.Param(self.model.time_index_p, within=pyo.Binary,
-                                               initialize=self.it2dict(availability_ev))
+                                               initialize=self.it2dict(availability_ev[:-1]))
+
+        self.model.capacity_ev = pyo.Param(self.model.time_index_soc, within=pyo.NonNegativeReals, initialize=self.it2dict(max_soc_ev))
 
         # Variables
         self.model.p_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.soc_ev = pyo.Var(self.model.time_index_soc, within=pyo.NonNegativeReals,
                                     initialize=self.model.init_soc_ev)
+
+        self.model.con_soc_ev_0_low = pyo.Constraint(
+            self.model.time_index_p1, rule=lambda m, t:
+            m.soc_ev[t] >= ev_params.current_soc_kwh
+        )
+        self.model.con_soc_ev_0_up = pyo.Constraint(
+            self.model.time_index_p1, rule=lambda m, t:
+            m.soc_ev[t] <= ev_params.current_soc_kwh + m.p_ev[t] * m.dt * m.ch_eff_ev
+        )
 
         self.model.con_ev_ch_limit = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
@@ -82,39 +97,42 @@ class PortfolioOptimizationProblem:
 
         self.model.con_soc_ev_max = pyo.Constraint(
             self.model.time_index_soc, rule=lambda m, t:
-            m.soc_ev[t] <= m.capacity_ev
-        )
-
-        self.model.con_soc_ev_init = pyo.Constraint(
-            self.model.time_index_soc, rule=lambda m, t:
-            m.soc_ev[m.time_index_soc.first()] == m.init_soc_ev
+            m.soc_ev[t] <= m.capacity_ev[t]
         )
 
         def arrival_constraint_f(model, t):
-            if t in arrival_ptus:
-                session_nr = arrival_ptus.index(t)
-                arrival_soc = ev_params.arrival_socs_kwh[session_nr]
-                return model.soc_ev[t] == arrival_soc
+            if t in arrival_ptus and t > 0:
+                arrival_soc = 0
+                return model.soc_ev[t-1] == arrival_soc
             else:
                 return pyo.Constraint.Skip
 
         self.model.con_soc_ev_arr = pyo.Constraint(self.model.time_index_soc, rule=arrival_constraint_f)
 
-        def departure_constraint_f(model, t):
+        def departure_constraint_f_up(model, t):
             if t in departure_ptus:
-                session_nr = departure_ptus.index(t)
-                departure_soc = ev_params.departure_socs_kwh[session_nr]
-                return model.soc_ev[t] >= departure_soc
+                departure_soc = departure_ptus_dict[t]
+                eps = 1.0e-3
+                return model.soc_ev[t] <= departure_soc + eps
             else:
                 return pyo.Constraint.Skip
 
-        self.model.con_soc_ev_dep = pyo.Constraint(self.model.time_index_soc, rule=departure_constraint_f)
+        def departure_constraint_f_low(model, t):
+            if t in departure_ptus:
+                departure_soc = departure_ptus_dict[t]
+                eps = 1.0e-3
+                return model.soc_ev[t] >= departure_soc - eps
+            else:
+                return pyo.Constraint.Skip
+
+        self.model.con_soc_ev_dep_up = pyo.Constraint(self.model.time_index_p, rule=departure_constraint_f_up)
+        self.model.con_soc_ev_dep_low = pyo.Constraint(self.model.time_index_p, rule=departure_constraint_f_low)
 
         def soc_update_f(model, t):
-            if (any(arr_ptu <= t < dep_ptu for arr_ptu, dep_ptu in
+            if (any(arr_ptu <= t <= dep_ptu for arr_ptu, dep_ptu in
                     zip(arrival_ptus, departure_ptus))) \
-                    and (t < model.time_index_soc.last()):
-                return model.soc_ev[t + 1] == model.soc_ev[t] + model.p_ev[t] * model.dt  # m.ch_eff_ev
+                    and (t < model.time_index_soc.last()) and t > 0:
+                return model.soc_ev[t] == model.soc_ev[t-1] + model.p_ev[t] * model.dt * model.ch_eff_ev
             else:
                 return pyo.Constraint.Skip
 
@@ -138,7 +156,7 @@ class PortfolioOptimizationProblem:
 
     def create_battery(self, battery: esdl.Battery, state_of_charge : float):
 
-        parameters = EsdlEntityParameterParser.get_battery_parameters(battery)
+        parameters = self.esdl_entity_parser.get_battery_parameters(battery)
 
         # Parameters
         self.model.capacity = pyo.Param(within=pyo.NonNegativeReals, initialize=parameters.capacity_kw)
@@ -217,8 +235,8 @@ class PortfolioOptimizationProblem:
 
         # House
         # Create capacitance and conductance matrices
-        building_params = EsdlEntityParameterParser.get_building_parameters(heat_pump.eContainer())
-        heat_pump_params = EsdlEntityParameterParser.get_heatpump_parameters(heat_pump)
+        building_params = self.esdl_entity_parser.get_building_parameters(heat_pump.eContainer())
+        heat_pump_params = self.esdl_entity_parser.get_heatpump_parameters(heat_pump)
 
         capacitance_matrix = np.diag(np.array([building_params.C_in_kwh, building_params.C_out_kwh]))
 
@@ -449,8 +467,8 @@ class PortfolioOptimizationProblem:
 
         # House
         # Create capacitance and conductance matrices
-        building_params = EsdlEntityParameterParser.get_building_parameters(hybrid_heat_pump.eContainer())
-        hybrid_heat_pump_params = EsdlEntityParameterParser.get_hybridheatpump_parameters(hybrid_heat_pump)
+        building_params = self.esdl_entity_parser.get_building_parameters(hybrid_heat_pump.eContainer())
+        hybrid_heat_pump_params = self.esdl_entity_parser.get_hybridheatpump_parameters(hybrid_heat_pump)
 
         capacitance_matrix = np.diag(np.array([building_params.C_in_kwh, building_params.C_out_kwh]))
 
@@ -635,13 +653,18 @@ class PortfolioOptimizationProblem:
     def get_first_value_from_component(self, name: str):
         column = self.highspy_interface.getColByName(f"{name}(0)")
         return self.solution.col_value[column[1]]
+
+    def get_value_from_component_at_time_index(self, name : str, index : int):
+        column = self.highspy_interface.getColByName(f"{name}({index})")
+        return self.solution.col_value[column[1]]
     
-    def get_model_parameter_value(self, name: str):
+    def get_model_parameter_value(self, name: str, at_time_index = 0):
         component = self.model.find_component(name)
         if isinstance(component, IndexedParam):
-            value_to_return = next(iter(component.values()))
-            LOGGER.info(f"Parameter {name} from model has value: {value_to_return}")
-            return pyo.value(value_to_return)
+            for i, val in enumerate(component.values()):
+                if i == at_time_index:
+                    LOGGER.info(f"Parameter {name} from model has value: {val}")
+                    return pyo.value(val)
         else:
             raise TypeError(f'Component {name} should be IndexedVar or IndexedParam')
         
@@ -668,6 +691,7 @@ class PortfolioOptimizationProblem:
             costs = m.buy_costs - m.sell_rev + slack_costs
             if is_grid_tariff:
                 costs += m.grid_costs
+
             return costs
 
         self.model.objective_function = pyo.Objective(sense=pyo.minimize, expr=total_costs)
@@ -731,7 +755,7 @@ class PortfolioOptimizationProblem:
             rule=lambda m: m.buy_costs == sum(buy_prices[t] * m.e_buy[t] for t in m.time_index_p))
 
 
-    def solve(self, mip_gap, show_logs=False):
+    def solve(self, mip_gap):
         filename_path = Path(__file__).parent / "model.mps"
         filename = str(filename_path)
         self.model.write(filename, io_options={'symbolic_solver_labels': True})
@@ -756,48 +780,48 @@ class PortfolioOptimizationProblem:
         os.remove(filename)
 
 
-    def create_static_bw_tariff(self,
+    def _create_static_bw_tariff(self,
                                 static_bw_price_low: float,
                                 static_bw_price_high: float,
-                                static_bw_power: float):
+                                static_bw_power: float,
+                                time_index : pyo.RangeSet):
 
         self.model.static_bw_price_low = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_low)
         self.model.static_bw_price_high = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_high)
         self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_power)
-        self.model.static_bw_costs = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+
+        self.model.static_bw_costs = pyo.Var(time_index, within=pyo.NonNegativeReals, initialize=0)
         self.model.grid_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
 
+
         # Constraints
         self.model.con_bw_low = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
+            time_index, rule=lambda m, t:
             # eur/kWh x kWh
             m.static_bw_price_high * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
         self.model.con_bw_high = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
+            time_index, rule=lambda m, t:
             # eur/kWh x kWh
             m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
-        self.model.con_grid_costs = pyo.Constraint(rule=lambda m: m.grid_costs == sum(m.static_bw_costs[t] for t in m.time_index_p))
+        self.model.con_grid_costs = pyo.Constraint(
+            rule=lambda m: m.grid_costs == sum(m.static_bw_costs[t] for t in time_index)
+        )
 
-    def add_static_bw_tariff(self, incentive_inputs: dict):
-        # Params and variables
-        self.model.static_bw_price_low = pyo.Param(within=pyo.NonNegativeReals, initialize=incentive_inputs['static_bw_price_low'])
-        self.model.static_bw_price_high = pyo.Param(within=pyo.NonNegativeReals, initialize=incentive_inputs['static_bw_price_high'])
-        self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=incentive_inputs['static_bw_power'])
+    def create_static_bw_tariff_full_horizon(self,
+                                    static_bw_price_low: float,
+                                    static_bw_price_high: float,
+                                    static_bw_power: float):
 
-        self.model.static_bw_costs = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        self._create_static_bw_tariff(static_bw_price_low, static_bw_price_high, static_bw_power, self.model.time_index_p)
 
-        # Constraints
-        self.model.con_bw_low = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            # eur/kWh x kWh
-            m.static_bw_price_high * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
+    def create_static_bw_tariff_1_time_step(self,
+                                        static_bw_power: float):
 
-        self.model.con_bw_high = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            # eur/kWh x kWh
-            m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
+        big_costs_constant = 5000
+        self._create_static_bw_tariff(big_costs_constant, big_costs_constant, static_bw_power, self.model.time_index_p1)
+
 
     def create_variable_tariff(self, variable_tariff: list):
         variable_tariff_dict = self.it2dict(variable_tariff)
@@ -867,9 +891,9 @@ class PortfolioOptimizationProblem:
         T = np.array(house_temperatures)
         heat_pump_params = None
         if isinstance(heat_pump, esdl.HeatPump):
-            heat_pump_params = EsdlEntityParameterParser.get_heatpump_parameters(heat_pump)
+            heat_pump_params = self.esdl_entity_parser.get_heatpump_parameters(heat_pump)
         elif isinstance(heat_pump, esdl.HybridHeatPump):
-            heat_pump_params = EsdlEntityParameterParser.get_hybridheatpump_parameters(heat_pump)
+            heat_pump_params = self.esdl_entity_parser.get_hybridheatpump_parameters(heat_pump)
 
         dt = pyo.value(self.model.dt)
 

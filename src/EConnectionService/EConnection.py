@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
+from datetime import datetime, timedelta
 import highspy
 import helics as h
+from dots_infrastructure.EsdlProfileParsingClasses import ParsedTimeSeriesProfile
 from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation, TimeRequestType
 from dots_infrastructure.HelicsFederateHelpers import HelicsSimulationExecutor
 from dots_infrastructure.Logger import LOGGER
-from esdl import esdl, EnergySystem
+from esdl import HeatDemandTypeEnum, HeatingDemand, esdl, EnergySystem
 
 import json
 import numpy as np
@@ -77,7 +78,11 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             SubscriptionDescription(esdl_type="EnergyMarket",
                                     input_name="day_ahead_prices",
                                     input_unit="EURO/MWh",
-                                    input_type=h.HelicsDataType.VECTOR)
+                                    input_type=h.HelicsDataType.VECTOR),
+            SubscriptionDescription(esdl_type="EnergySystem",
+                                    input_name="congestion_signal",
+                                    input_unit="KW",
+                                    input_type=h.HelicsDataType.DOUBLE)
         ]
 
         publication_values = [
@@ -90,15 +95,20 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                                    esdl_type="EConnection",
                                    output_name="aggregated_reactive_power",
                                    output_unit="VAr",
+                                   data_type=h.HelicsDataType.VECTOR),            
+            PublicationDescription(global_flag=True, 
+                                   esdl_type="EConnection", 
+                                   output_name="predicted_aggregated_active_power",
+                                   output_unit="W", 
+                                   data_type=h.HelicsDataType.VECTOR),
+            PublicationDescription(global_flag=True,
+                                   esdl_type="EConnection",
+                                   output_name="predicted_aggregated_reactive_power",
+                                   output_unit="VAr",
                                    data_type=h.HelicsDataType.VECTOR),
             PublicationDescription(global_flag=True,
                                    esdl_type="EConnection",
                                    output_name="dispatch_pv",
-                                   output_unit="W",
-                                   data_type=h.HelicsDataType.DOUBLE),
-            PublicationDescription(global_flag=True,
-                                   esdl_type="EConnection",
-                                   output_name="dispatch_ev",
                                    output_unit="W",
                                    data_type=h.HelicsDataType.DOUBLE),
             PublicationDescription(global_flag=True,
@@ -165,6 +175,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         self.got_ems: dict[EsdlId, bool] = {}
         self.static_prices: dict[EsdlId, float] = {}
         self.dynamic_flat_prices: dict[EsdlId, float] = {}
+        self.esdl_entity_parser = EsdlEntityParameterParser()
 
         # Fixed global data, the same for all econnections
         self.optimization_horizon = 48  # number of time steps
@@ -263,15 +274,16 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         - read the return values from the model
         - compute the (3 phase unbalanced) dispatch
         """
-        LOGGER.info(f"Params: {param_dict}")
+        LOGGER.debug(f"Params: {param_dict}")
         scaled_param_dict = self.apply_scaling_to_input_params_calculate_dispatch(param_dict)
+        congestion_signal = get_single_param_with_name(param_dict, 'congestion_signal', False)
 
         # START user calc
 
         # Create problem if there is an EMS
         # If not: set load to the baseload and set all dispatch to 0
         if self.got_ems[esdl_id]:
-            problem = self.create_portfolio_optimization_problem(scaled_param_dict, time_step_number, esdl_id)
+            problem = self.create_portfolio_optimization_problem(scaled_param_dict, time_step_number, esdl_id, congestion_signal, simulation_time)
 
             # Solve problem
             problem.solve(mip_gap=0.001)  # mip_gap=0.07
@@ -288,13 +300,16 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         # Store results
         self.store_return_values(ret_val, simulation_time, esdl_id)
+        ret_val.pop('dispatch_ev')
 
         return ret_val
 
     def create_portfolio_optimization_problem(self,
                                               param_dict: dict,
                                               time_step_number: TimeStepInformation,
-                                              esdl_id: EsdlId):
+                                              esdl_id: EsdlId,
+                                              congestion_signal : float,
+                                              simulation_time : datetime):
         """
         Builds the optimization problem in the following steps:
         - Add index sets
@@ -310,7 +325,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         asset_portfolio = self.asset_portfolios[esdl_id]
 
         # Create optimization problem
-        problem = PortfolioOptimizationProblem(self.highspy_interface)
+        problem = PortfolioOptimizationProblem(self.esdl_entity_parser, self.highspy_interface)
         time_params = {'n_steps': self.optimization_horizon,
                        'dt': self.ems_time_step_seconds,
                        'time_step_nr': time_step_nr}
@@ -354,8 +369,13 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                 dhw_temperature = get_single_param_with_name(param_dict, "dhw_temperature")
                 dhw_temperature = round(dhw_temperature, self.round_decimals)
 
-                dhw_profile = heat_pump.port[0].profile[0].values  # assumes dhw profile is saved here
-                dhw_profile_slice = dhw_profile[time_step_nr - 1:time_step_nr - 1 + self.optimization_horizon]
+                dhw_demand = self.get_hot_water_demand_profile(heat_pump)
+                dhw_profile = dhw_demand.port[1].profile[0]
+                profile = ParsedTimeSeriesProfile(dhw_profile)
+                from_date = simulation_time
+                to_date = simulation_time + timedelta(seconds=self.ems_time_step_seconds * self.optimization_horizon)
+                dhw_profile_slice = profile.get_data_in_timeseries_format(from_date, to_date, self.ems_time_step_seconds)
+
                 dhw_profile_slice = [round(value, self.round_decimals) for value in dhw_profile_slice]
 
                 problem.create_heat_pump(heat_pump,
@@ -379,9 +399,8 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         if 'EVChargingStation' in asset_portfolio:
             ev_charging_station = asset_portfolio['EVChargingStation']['esdl_object']
-            state_of_charge = get_single_param_with_name(param_dict, "state_of_charge_ev")
-            state_of_charge = round(state_of_charge, self.round_decimals)
-            problem.create_ev_charging_station(ev_charging_station, state_of_charge)
+            ev_params = self.esdl_entity_parser.get_ev_parameters(ev_charging_station, self.simulator_configuration.start_time, self.simulator_configuration.simulation_duration_in_seconds, self.ems_time_step_seconds, simulation_time, time_step_number)
+            problem.create_ev_charging_station(ev_params)
 
         # Create energy balance constraints, grid tariff constraints and the objective function
         da_slice = get_single_param_with_name(param_dict, 'day_ahead_prices')
@@ -404,9 +423,13 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         is_grid_tariff = False
         if self.is_static_bw_tariff:
             is_grid_tariff = True
-            problem.create_static_bw_tariff(self.static_bw_price_low,
+            problem.create_static_bw_tariff_full_horizon(self.static_bw_price_low,
                                             self.static_bw_price_high,
                                             self.static_bw_powers[esdl_id])
+
+        if congestion_signal > 0 and self.congestion_management_active:
+            is_grid_tariff = True
+            problem.create_static_bw_tariff_1_time_step(congestion_signal)
         if self.is_variable_tariff:
             is_grid_tariff = True
             problem.create_variable_tariff(self.variable_tariff[time_step_nr - 1:time_step_nr - 1 + self.optimization_horizon])
@@ -419,14 +442,25 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         return problem
 
+    def get_hot_water_demand_profile(self, heat_pump) -> HeatingDemand:
+        connected_ports = [port for port in heat_pump.port if len(port.connectedTo) > 0]
+        for connected_port in connected_ports:
+            for entity in connected_port.connectedTo:
+                if isinstance(entity.eContainer(), HeatingDemand) and entity.eContainer().type == HeatDemandTypeEnum.from_string('HOT_TAPWATER'):
+                    return entity.eContainer()
+
     def get_return_values_no_ems(self, param_dict: dict, esdl_id: str):
         ret_val = {'dispatch_ev': 0.0, 'dispatch_pv': -0.0, 'heat_power_to_tank_dhw': 0.0, 'heat_power_to_buffer': 0.0,
                    'heat_power_to_dhw': 0.0, 'heat_power_to_house': 0.0, 'heat_power_to_buffer_hhp': 0.0,
                    'heat_power_to_house_hhp': 0.0, 'aggregated_active_power': [0.0, 0.0, 0.0],
-                   'aggregated_reactive_power': [0.0, 0.0, 0.0], 'active_power_to_charge' : 0.0}
+                   'aggregated_reactive_power': [0.0, 0.0, 0.0],
+                   'predicted_aggregated_active_power': [0.0, 0.0, 0.0], 'predicted_aggregated_reactive_power': [0.0, 0.0, 0.0], 
+                   'active_power_to_charge' : 0.0}
 
         aggregated_active_power = np.array([0.0, 0.0, 0.0])
         aggregated_reactive_power = np.array([0.0, 0.0, 0.0])
+        predicted_aggregated_active_power = np.array([0.0, 0.0, 0.0])
+        predicted_aggregated_reactive_power = np.array([0.0, 0.0, 0.0])
 
         asset_portfolio = self.asset_portfolios[esdl_id]
 
@@ -435,8 +469,15 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         aggregated_active_power += p
         aggregated_reactive_power += q
 
+        active_power = get_single_param_with_name(param_dict, "active_power")[1]
+        p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'ElectricityDemand', active_power)
+        predicted_aggregated_active_power += p
+        predicted_aggregated_reactive_power += q
+
         ret_val['aggregated_active_power'] = aggregated_active_power.tolist()
         ret_val['aggregated_reactive_power'] = aggregated_reactive_power.tolist()
+        ret_val['predicted_aggregated_active_power'] = predicted_aggregated_active_power.tolist()
+        ret_val['predicted_aggregated_reactive_power'] = predicted_aggregated_reactive_power.tolist()
 
         return ret_val
 
@@ -444,10 +485,14 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         ret_val = {'dispatch_ev': 0.0, 'dispatch_pv': -0.0, 'heat_power_to_tank_dhw': 0.0, 'heat_power_to_buffer': 0.0,
                    'heat_power_to_dhw': 0.0, 'heat_power_to_house': 0.0, 'heat_power_to_buffer_hhp': 0.0,
                    'heat_power_to_house_hhp': 0.0, 'aggregated_active_power': [0.0, 0.0, 0.0],
-                   'aggregated_reactive_power': [0.0, 0.0, 0.0], 'active_power_to_charge' : 0.0}
+                   'aggregated_reactive_power': [0.0, 0.0, 0.0],
+                   'predicted_aggregated_active_power': [0.0, 0.0, 0.0], 'predicted_aggregated_reactive_power': [0.0, 0.0, 0.0], 
+                   'active_power_to_charge' : 0.0}
 
         aggregated_active_power = np.array([0.0, 0.0, 0.0])
         aggregated_reactive_power = np.array([0.0, 0.0, 0.0])
+        predicted_aggregated_active_power = np.array([0.0, 0.0, 0.0])
+        predicted_aggregated_reactive_power = np.array([0.0, 0.0, 0.0])
 
         asset_portfolio = self.asset_portfolios[esdl_id]
 
@@ -458,27 +503,37 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             aggregated_active_power += p
             aggregated_reactive_power += q
 
+            p_edemand_w = problem.get_model_parameter_value('p_edemand', 1) * 1000
+            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'ElectricityDemand', p_edemand_w)
+            predicted_aggregated_active_power += p
+            predicted_aggregated_reactive_power += q
+
+
         if 'PVInstallation' in asset_portfolio:
-            p_use_w = - problem.get_first_value_from_component('p_pv_use') * 1000
-            p_sell_w = - problem.get_first_value_from_component('p_pv_sell') * 1000
-            p_pv = p_use_w + p_sell_w
+            p_pv = self.get_power_value_pv_at_index(problem, 0)
             ret_val['dispatch_pv'] = p_pv
 
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'PVInstallation', p_pv)
             aggregated_active_power += p
             aggregated_reactive_power += q
+            
+            p_pv = self.get_power_value_pv_at_index(problem, 1)
+            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'PVInstallation', p_pv)
+            predicted_aggregated_active_power += p
+            predicted_aggregated_reactive_power += q
 
         if 'Battery' in asset_portfolio:
-            p_ch_w = problem.get_first_value_from_component('p_ch') * 1000
-            p_bat_use_w = problem.get_first_value_from_component('p_bat_use') * 1000
-            p_bat_sell_w = problem.get_first_value_from_component('p_bat_sell') * 1000
-            battery : esdl.Battery = asset_portfolio['Battery']['esdl_object']
-            p_battery = battery.chargeEfficiency * p_ch_w - battery.dischargeEfficiency * (p_bat_use_w + p_bat_sell_w)
+            p_battery = self.get_power_value_battery_at_index(problem, asset_portfolio, 0)
             ret_val['active_power_to_charge'] = p_battery
 
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'Battery', p_battery)
             aggregated_active_power += p
             aggregated_reactive_power += q
+
+            p_battery = self.get_power_value_battery_at_index(problem, asset_portfolio, 1)
+            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'Battery', p_battery)
+            predicted_aggregated_active_power += p
+            predicted_aggregated_reactive_power += q
 
         if 'HeatPump' in asset_portfolio:
             p_hp_w = problem.get_first_value_from_component('p_hp') * 1000
@@ -494,6 +549,11 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             aggregated_active_power += p
             aggregated_reactive_power += q
 
+            p_hp_w = problem.get_value_from_component_at_time_index('p_hp', 1) * 1000
+            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'HeatPump', p_hp_w)
+            predicted_aggregated_active_power += p
+            predicted_aggregated_reactive_power += q
+
         if 'HybridHeatPump' in asset_portfolio:
             p_hhp_w = problem.get_first_value_from_component('p_hhp') * 1000
             ret_val["heat_power_to_buffer_hhp"] = problem.get_first_value_from_component('Q_to_buffer') * 1000
@@ -504,18 +564,46 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             aggregated_active_power += p
             aggregated_reactive_power += q
 
+            p_hhp_w = problem.get_value_from_component_at_time_index('p_hhp', 1) * 1000
+            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'HybridHeatPump', p_hhp_w)
+            predicted_aggregated_active_power += p
+            predicted_aggregated_reactive_power += q
+
         if 'EVChargingStation' in asset_portfolio:
             p_ev_w = problem.get_first_value_from_component('p_ev') * 1000
             ret_val['dispatch_ev'] = p_ev_w
-
+            ev = asset_portfolio['EVChargingStation']['esdl_object']
+            soc_ev = problem.get_value_from_component_at_time_index('soc_ev', 1)
+            self.esdl_entity_parser.set_soc_ev(ev, soc_ev)
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'EVChargingStation', p_ev_w)
             aggregated_active_power += p
             aggregated_reactive_power += q
+            
+            p_ev_w = problem.get_value_from_component_at_time_index('p_ev', 1) * 1000
+            p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'EVChargingStation', p_ev_w)
+            predicted_aggregated_active_power += p
+            predicted_aggregated_reactive_power += q
 
         ret_val['aggregated_active_power'] = aggregated_active_power.tolist()
         ret_val['aggregated_reactive_power'] = aggregated_reactive_power.tolist()
+        ret_val['predicted_aggregated_active_power'] = predicted_aggregated_active_power.tolist()
+        ret_val['predicted_aggregated_reactive_power'] = predicted_aggregated_reactive_power.tolist()
 
         return ret_val
+
+    def get_power_value_battery_at_index(self, problem : PortfolioOptimizationProblem, asset_portfolio : dict, index : int):
+        p_ch_w = problem.get_value_from_component_at_time_index('p_ch', index) * 1000
+        p_bat_use_w = problem.get_value_from_component_at_time_index('p_bat_use', index) * 1000
+        p_bat_sell_w = problem.get_value_from_component_at_time_index('p_bat_sell', index) * 1000
+        battery : esdl.Battery = asset_portfolio['Battery']['esdl_object']
+        p_battery = battery.chargeEfficiency * p_ch_w - battery.dischargeEfficiency * (p_bat_use_w + p_bat_sell_w)
+        return p_battery
+
+    def get_power_value_pv_at_index(self, problem : PortfolioOptimizationProblem, index : int):
+        p_use_w = - problem.get_value_from_component_at_time_index('p_pv_use', index) * 1000
+        p_sell_w = - problem.get_value_from_component_at_time_index('p_pv_sell', index) * 1000
+        p_pv = p_use_w + p_sell_w
+        return p_pv
 
     def store_return_values(self, ret_val: dict, simulation_time: datetime, esdl_id: EsdlId):
         active_powers = ret_val['aggregated_active_power']
@@ -550,6 +638,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         self.is_static_bw_tariff = False
         self.is_variable_tariff = False
         self.is_variable_peak_tariff = False
+        self.congestion_management_active = False
         self.is_feed_in_tariff = False
         self.feed_in_price = None
         for measure in measures.measure:
@@ -558,7 +647,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                 self.is_static_bw_tariff = True
                 self.static_bw_price_low = 0.0
                 self.static_bw_price_high = measure.costInformation.variableOperationalCosts.value
-                self.static_bw_powers = {esdl_id: EsdlEntityParameterParser.get_capacity_from_econnection(self.esdl_objects[esdl_id]) for esdl_id
+                self.static_bw_powers = {esdl_id: self.esdl_entity_parser.get_capacity_from_econnection(self.esdl_objects[esdl_id]) for esdl_id
                                          in self.simulator_configuration.esdl_ids}
 
             if measure.name == 'variable_tariff':
@@ -579,9 +668,15 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                 self.is_feed_in_tariff = True
                 self.feed_in_price = measure.costInformation.variableOperationalCosts.value
 
+            if measure.name == 'congestion_management_active':
+                self.congestion_management_active = True
+
     def set_got_ems(self, esdl_id: str):
-        description_dict = json.loads(self.esdl_objects[esdl_id].description)
-        self.got_ems[esdl_id] = description_dict['got_ems']
+        try:
+            description_dict = json.loads(self.esdl_objects[esdl_id].description)
+            self.got_ems[esdl_id] = description_dict['got_ems']
+        except json.JSONDecodeError:
+            self.got_ems[esdl_id] = True
 
     def set_energy_contract_data(self, esdl_id: str):
         description_dict = json.loads(self.esdl_objects[esdl_id].description)
