@@ -156,7 +156,7 @@ class EsdlEntityParameterParser:
             departure_ptus = {}
             current_datetime = simulation_start_time
             end_date_time = simulation_start_time + timedelta(seconds = simulation_duration_in_seconds)
-            ptu = 0
+            ptu = 1
             while current_datetime <= end_date_time:
                 arrival_ptu = any(current_datetime <= elem.from_ < current_datetime + timedelta(seconds=time_step_in_seconds)  for elem in datetime_profile.element)
                 profile_elem = next((elem for elem in datetime_profile.element if current_datetime <= elem.to < current_datetime + timedelta(seconds=time_step_in_seconds)), None)

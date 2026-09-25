@@ -36,9 +36,9 @@ class PortfolioOptimizationProblem:
         # change arrival/departure ptus based on current simulated time-step
         # e.g. we work in relative ptus from the current simulated ptu
         time_step_nr = pyo.value(self.model.time_step_nr)
-        arrival_ptus = [ptu - (time_step_nr) for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
-        departure_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.departure_ptus.keys()]
-        departure_ptus_dict = {ptu - (time_step_nr - 1): val for ptu, val in ev_params.departure_ptus.items()}
+        arrival_ptus = [ptu - time_step_nr for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
+        departure_ptus = [ptu - time_step_nr for ptu in ev_params.departure_ptus.keys()]
+        departure_ptus_dict = {ptu - time_step_nr: val for ptu, val in ev_params.departure_ptus.items()}
 
         LOGGER.debug(f"arrival ptus: {ev_params.arrival_ptus}")
         LOGGER.debug(f"departure ptus: {ev_params.departure_ptus}")
@@ -49,7 +49,7 @@ class PortfolioOptimizationProblem:
 
         # Parameters
         # Numbers
-        self.model.capacity_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.max_soc_kwh)
+        
         self.model.init_soc_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.current_soc_kwh)
 
         self.model.ch_eff_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.efficiency)
@@ -57,14 +57,19 @@ class PortfolioOptimizationProblem:
 
         # Arrays
         # Create availability list
-        number_of_ptus = len(self.model.time_index_p)
+        number_of_ptus = len(self.model.time_index_p) + 1
         availability_ev = number_of_ptus * [0]
+        max_soc_ev = [0 for i in self.model.time_index_soc]
         for arrival_ptu, departure_ptu in zip(arrival_ptus, departure_ptus):
-            # Add 1 to departure and arrival, because by convention the car can be charged during the departure ptu
-            for ptu in range(max(0, arrival_ptu), max(0, min(departure_ptu, number_of_ptus)) ):
+
+            for ptu in range(max(0, arrival_ptu), max(0, min(departure_ptu + 1, number_of_ptus)) ):
                 availability_ev[ptu] = 1
+                max_soc_ev[ptu] = departure_ptus_dict[departure_ptu]
+
         self.model.availability_ev = pyo.Param(self.model.time_index_p, within=pyo.Binary,
-                                               initialize=self.it2dict(availability_ev))
+                                               initialize=self.it2dict(availability_ev[:-1]))
+
+        self.model.capacity_ev = pyo.Param(self.model.time_index_soc, within=pyo.NonNegativeReals, initialize=self.it2dict(max_soc_ev))
 
         # Variables
         self.model.p_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
@@ -83,7 +88,7 @@ class PortfolioOptimizationProblem:
 
         self.model.con_soc_ev_max = pyo.Constraint(
             self.model.time_index_soc, rule=lambda m, t:
-            m.soc_ev[t] <= m.capacity_ev
+            m.soc_ev[t] <= m.capacity_ev[t]
         )
 
         self.model.con_soc_ev_init = pyo.Constraint(
