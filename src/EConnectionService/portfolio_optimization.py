@@ -37,7 +37,8 @@ class PortfolioOptimizationProblem:
         # e.g. we work in relative ptus from the current simulated ptu
         time_step_nr = pyo.value(self.model.time_step_nr)
         arrival_ptus = [ptu - (time_step_nr) for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
-        departure_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.departure_ptus]
+        departure_ptus = [ptu - (time_step_nr - 1) for ptu in ev_params.departure_ptus.keys()]
+        departure_ptus_dict = {ptu - (time_step_nr - 1): val for ptu, val in ev_params.departure_ptus.items()}
 
         LOGGER.debug(f"arrival ptus: {ev_params.arrival_ptus}")
         LOGGER.debug(f"departure ptus: {ev_params.departure_ptus}")
@@ -101,7 +102,7 @@ class PortfolioOptimizationProblem:
 
         def departure_constraint_f_up(model, t):
             if t in departure_ptus:
-                departure_soc = ev_params.max_soc_kwh
+                departure_soc = departure_ptus_dict[t]
                 eps = 1.0e-3
                 return model.soc_ev[t] <= departure_soc + eps
             else:
@@ -109,7 +110,7 @@ class PortfolioOptimizationProblem:
 
         def departure_constraint_f_low(model, t):
             if t in departure_ptus:
-                departure_soc = ev_params.max_soc_kwh
+                departure_soc = departure_ptus_dict[t]
                 eps = 1.0e-3
                 return model.soc_ev[t] >= departure_soc - eps
             else:

@@ -5,6 +5,7 @@ import esdl
 from dataclasses import dataclass
 
 from dots_infrastructure.DataClasses import TimeStepInformation
+from dots_infrastructure.Logger import LOGGER
 
 @dataclass
 class BuildingParameters:
@@ -51,7 +52,7 @@ class HeatPumpParameters(GeneralHeatpumpParameters):
 @dataclass
 class EVParameters:
     arrival_ptus : List[int]
-    departure_ptus : List[int]
+    departure_ptus : dict[int, float]
     max_soc_kwh : float
     max_power_kw : float
     efficiency : float
@@ -152,17 +153,17 @@ class EsdlEntityParameterParser:
         if key not in self._ev_cache:
 
             arrival_ptus = []
-            departure_ptus = []
+            departure_ptus = {}
             current_datetime = simulation_start_time
             end_date_time = simulation_start_time + timedelta(seconds = simulation_duration_in_seconds)
             ptu = 0
             while current_datetime <= end_date_time:
-                arrival_ptu = any(elem.from_ for elem in datetime_profile.element if current_datetime <= elem.from_ < current_datetime + timedelta(seconds=time_step_in_seconds) )
-                departure_ptu = any(elem.to for elem in datetime_profile.element if current_datetime <= elem.to < current_datetime + timedelta(seconds=time_step_in_seconds) )
+                arrival_ptu = any(current_datetime <= elem.from_ < current_datetime + timedelta(seconds=time_step_in_seconds)  for elem in datetime_profile.element)
+                profile_elem = next((elem for elem in datetime_profile.element if current_datetime <= elem.to < current_datetime + timedelta(seconds=time_step_in_seconds)), None)
                 if arrival_ptu:
                     arrival_ptus.append(ptu)
-                if departure_ptu and len(departure_ptus) == len(arrival_ptus) - 1:
-                    departure_ptus.append(ptu)
+                if profile_elem is not None and len(departure_ptus) == len(arrival_ptus) - 1:
+                    departure_ptus[ptu] = profile_elem.value
                 ptu += 1
                 current_datetime = current_datetime + timedelta(seconds=time_step_in_seconds)
 
