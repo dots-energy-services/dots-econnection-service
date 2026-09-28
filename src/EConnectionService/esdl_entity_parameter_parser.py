@@ -185,7 +185,8 @@ class EsdlEntityParameterParser:
 
         ev_params = self._ev_cache[key]
         ev_params.max_soc_kwh = max_soc_kwh
-        if timestep_information.current_time_step_number in ev_params.arrival_ptus or timestep_information.current_time_step_number - 1 in ev_params.departure_ptus:
+        eps = 1.0e-3
+        if timestep_information.current_time_step_number in ev_params.arrival_ptus or timestep_information.current_time_step_number - 1 in ev_params.departure_ptus or -eps < ev_params.current_soc_kwh < 0:
             ev_params.current_soc_kwh = 0
         return ev_params
 
