@@ -507,6 +507,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'ElectricityDemand', p_edemand_w)
             predicted_aggregated_active_power += p
             predicted_aggregated_reactive_power += q
+            self.influx_connector.set_time_step_data_point(esdl_id, 'active_dispatch_baseload', simulation_time, p_edemand_w)
 
 
         if 'PVInstallation' in asset_portfolio:
