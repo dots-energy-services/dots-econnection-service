@@ -6,7 +6,7 @@ from dots_infrastructure.EsdlProfileParsingClasses import ParsedTimeSeriesProfil
 from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation, TimeRequestType
 from dots_infrastructure.HelicsFederateHelpers import HelicsSimulationExecutor
 from dots_infrastructure.Logger import LOGGER
-from esdl import HeatDemandTypeEnum, HeatingDemand, esdl, EnergySystem
+from esdl import ElectricityDemand, ElectricityNetwork, HeatDemandTypeEnum, HeatingDemand, OutPort, esdl, EnergySystem
 
 import json
 import numpy as np
@@ -223,11 +223,13 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         The phases entry is always a list of length 3 with bools to indicate to which phase the asset is connected
         """
         asset_portfolio = dict()
+        e_demand = None
         if not isinstance(econnection.eContainer(), esdl.Building):
             raise ValueError(f'Econnection {econnection.id} is not in a building')
         else:
             assets = ["ElectricityDemand", "PVInstallation", "Battery", "HeatPump", "HybridHeatPump", "EVChargingStation"]
             building = econnection.eContainer()
+            e_demand_phases = [False, False, False]
             for asset in building.asset:
                 asset_name = type(asset).__name__
                 if asset_name in assets:
@@ -235,6 +237,17 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                         raise ValueError(f'There was already a {asset_name} connected to Econnection {econnection.id}')
                     else:
                         asset_portfolio[asset_name] = {'esdl_object': asset, 'phases': self.get_phases_from_asset(asset)}
+                if isinstance(asset, ElectricityNetwork):
+                    for port in asset.port:
+                        if isinstance(port, OutPort):
+                            for out_asset in port.connectedTo:
+                                if isinstance(out_asset.eContainer(), ElectricityDemand):
+                                    e_demand = out_asset.eContainer()
+                                    for i in range(1, 4):
+                                        if f'ph{i}' in asset.name.lower():
+                                            e_demand_phases[i - 1] = True
+        if e_demand is not None:
+            asset_portfolio[type(e_demand).__name__] = {'esdl_object': e_demand, 'phases': e_demand_phases}
 
         return asset_portfolio
 
@@ -502,12 +515,12 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'ElectricityDemand', p_edemand_w)
             aggregated_active_power += p
             aggregated_reactive_power += q
+            self.influx_connector.set_time_step_data_point(esdl_id, 'active_dispatch_baseload', simulation_time, p_edemand_w)
 
             p_edemand_w = problem.get_model_parameter_value('p_edemand', 1) * 1000
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'ElectricityDemand', p_edemand_w)
             predicted_aggregated_active_power += p
             predicted_aggregated_reactive_power += q
-            self.influx_connector.set_time_step_data_point(esdl_id, 'active_dispatch_baseload', simulation_time, p_edemand_w)
 
 
         if 'PVInstallation' in asset_portfolio:
@@ -585,7 +598,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             predicted_aggregated_active_power += p
             predicted_aggregated_reactive_power += q
 
-        if any(-1.0e-6 < val < 1.0e-6 for val in  aggregated_active_power):
+        if all(-1.0e-6 < val < 1.0e-6 for val in aggregated_active_power):
             raise ValueError(f"Unexpected load of 0.0 for id: {esdl_id} in {aggregated_active_power}" )
         ret_val['aggregated_active_power'] = aggregated_active_power.tolist()
         ret_val['aggregated_reactive_power'] = aggregated_reactive_power.tolist()
