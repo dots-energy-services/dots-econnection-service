@@ -598,8 +598,6 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             predicted_aggregated_active_power += p
             predicted_aggregated_reactive_power += q
 
-        if all(-1.0e-6 < val < 1.0e-6 for val in aggregated_active_power):
-            raise ValueError(f"Unexpected load of 0.0 for id: {esdl_id} in {aggregated_active_power}" )
         ret_val['aggregated_active_power'] = aggregated_active_power.tolist()
         ret_val['aggregated_reactive_power'] = aggregated_reactive_power.tolist()
         ret_val['predicted_aggregated_active_power'] = predicted_aggregated_active_power.tolist()
