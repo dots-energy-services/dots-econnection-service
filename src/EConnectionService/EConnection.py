@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
+from re import match
+import re
 import highspy
 import helics as h
-from dots_infrastructure.EsdlProfileParsingClasses import ParsedTimeSeriesProfile
+from dots_infrastructure.EsdlProfileParsingClasses import ParsedDateTimeProfile, ParsedTimeSeriesProfile
 from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation, TimeRequestType
 from dots_infrastructure.HelicsFederateHelpers import HelicsSimulationExecutor
 from dots_infrastructure.Logger import LOGGER
-from esdl import ElectricityDemand, ElectricityNetwork, HeatDemandTypeEnum, HeatingDemand, OutPort, esdl, EnergySystem
+from esdl import DateTimeProfile, ElectricityDemand, ElectricityNetwork, HeatDemandTypeEnum, HeatingDemand, OutPort, esdl, EnergySystem
 
 import json
 import numpy as np
@@ -445,7 +447,8 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             problem.create_static_bw_tariff_1_time_step(congestion_signal)
         if self.is_variable_tariff:
             is_grid_tariff = True
-            problem.create_variable_tariff(self.variable_tariff[time_step_nr - 1:time_step_nr - 1 + self.optimization_horizon])
+            variable_peak_tariff_vals = self.get_variable_tariffs_in_quarterly_values(simulation_time, simulation_time + timedelta(seconds=self.optimization_horizon * self.ems_time_step_seconds), self.ems_time_step_seconds)
+            problem.create_variable_tariff(variable_peak_tariff_vals, self.variable_tariff_rate)
         if self.is_variable_peak_tariff:
             is_grid_tariff = True
             problem.create_variable_peak_tariff(self.variable_peak_tariff[time_step_nr - 1:time_step_nr - 1 + self.optimization_horizon],
@@ -667,8 +670,10 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             if measure.name == 'variable_tariff':
                 LOGGER.info("Variable tariff detected")
                 self.is_variable_tariff = True
-                price_profile = measure.costInformation.variableOperationalCosts
-                self.variable_tariff = [el.value for el in price_profile.element]
+                self.variable_tariff : ParsedDateTimeProfile = ParsedDateTimeProfile(measure.costInformation.variableOperationalCosts)
+                match = re.search(r"[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?", measure.costInformation.name)
+                first_float = float(match.group()) if match else None
+                self.variable_tariff_rate = first_float
 
             if measure.name == 'variable_peak_tariff':
                 LOGGER.info("Variable peak tariff detected")
@@ -684,6 +689,20 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
             if measure.name == 'congestion_management_active':
                 self.congestion_management_active = True
+
+
+    def get_variable_tariffs_in_quarterly_values(self, from_date : datetime, to_date : datetime, timestep_in_seconds : int):
+        values_date = datetime(from_date.year, from_date.month, 1, from_date.hour, from_date.minute)
+        vals = []
+        amount_of_vals = int((to_date - from_date).seconds / timestep_in_seconds)
+        while len(vals) < amount_of_vals:
+            data = self.variable_tariff.get_data(values_date, values_date + timedelta(seconds=timestep_in_seconds))
+            vals.append(sum(data)/len(data))
+            values_date = values_date + timedelta(seconds=timestep_in_seconds)
+            if values_date.day > 1:
+                values_date = datetime(values_date.year, to_date.month, 1, values_date.hour, values_date.minute)
+        return vals
+
 
     def set_got_ems(self, esdl_id: str):
         try:
