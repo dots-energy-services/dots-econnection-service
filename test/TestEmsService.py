@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import random
 from typing import List
@@ -29,7 +29,10 @@ class EmsTestParam:
     esdl_file : str
     congestion_signal_kw : float = 0.0
 
-class Test(unittest.TestCase):
+class EmsTest(unittest.TestCase):
+
+    def setUp(self):
+        CalculationServiceHelperFunctions.get_simulator_configuration_from_environment = simulator_environment_e_connection
 
     def load_esdl_file(self, file_path):
         esh = EnergySystemHandler()
@@ -65,8 +68,23 @@ class Test(unittest.TestCase):
         edemand_param["house_temperatures"] = [291.85009999999994, 288.3497627218783]
         return edemand_param
 
-    def setUp(self):
-        CalculationServiceHelperFunctions.get_simulator_configuration_from_environment = simulator_environment_e_connection
+class TestEmsHelperFunctions(EmsTest):
+    
+    def test_given_tou_active_correct_weights_are_put_in_horizon(self):
+        test_examples = [
+            (datetime(2024, 3, 31, 22, 0, 0), 4 * [1.0] + 4 * [0.7] + 12 * [0.5] + 28 * [0.3] ),
+            (datetime(2024, 1, 1, 0, 0, 0), 4 * [0.7] + 24 * [0.5] + 12 * [0.7] + 8 * [0.5] )
+        ]
+        for i in range(0, len(test_examples)):
+            with self.subTest(i=i, params = test_examples[i]):
+                energy_system = self.load_esdl_file('test-peak-tariff.esdl')
+                service = self.init_e_connection_service(energy_system)
+                from_date = test_examples[i][0]
+                weight_vals = service.get_variable_tariffs_in_quarterly_values(from_date, from_date + timedelta(seconds=900*48), 900)
+                expected_weight_vals = test_examples[i][1]
+                self.assertListEqual(weight_vals, expected_weight_vals)
+
+class TestEmsOptimization(EmsTest):
 
     def test_different_tariff_instruments(self):
         test_examples = [
@@ -177,13 +195,24 @@ class Test(unittest.TestCase):
         esdl_id_to_test = "5c19dcff-b004-4644-99b9-f42d15a34f3a"
         ev_charging_station = service.asset_portfolios[esdl_id_to_test]['EVChargingStation']['esdl_object']
 
-        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 15, 0), TimeStepInformation(1,96), esdl_id_to_test, energy_system)
-        ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, datetime(2024,1,14, 0, 15, 0))
+        time_step = TimeStepInformation(2,96)
+        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 30, 0), time_step, esdl_id_to_test, energy_system)
+        ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, datetime(2024,1,14, 0, 15, 0), time_step)
         self.assertNotEqual(ev_params.current_soc_kwh, 0)
 
-        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 15, 0), TimeStepInformation(2,96), esdl_id_to_test, energy_system)
-        ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, datetime(2024,1,14, 0, 30, 0))
+        time_step_2 = TimeStepInformation(3,96)
+        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 45, 0), time_step_2, esdl_id_to_test, energy_system)
+        ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, datetime(2024,1,14, 0, 30, 0), time_step_2)
         self.assertNotEqual(ev_params.current_soc_kwh, 0)
+
+    def test_ev_arrives_soc_is_zero(self):
+        pass
+
+    def test_ev_with_multiple_sessions_in_horizon(self):
+        pass
+
+    def test_consecutive_ev_sessions(self):
+        pass
 
 
 if __name__ == '__main__':

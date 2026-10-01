@@ -823,7 +823,7 @@ class PortfolioOptimizationProblem:
         self._create_static_bw_tariff(big_costs_constant, big_costs_constant, static_bw_power, self.model.time_index_p1)
 
 
-    def create_variable_tariff(self, variable_tariff: list):
+    def create_variable_tariff(self, variable_tariff: list, tariff_rate : float):
         variable_tariff_dict = self.it2dict(variable_tariff)
         self.model.variable_tariff = pyo.Param(self.model.time_index_p, within=pyo.NonNegativeReals,
                                                initialize=variable_tariff_dict)
@@ -831,7 +831,7 @@ class PortfolioOptimizationProblem:
         self.model.grid_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
 
         self.model.con_grid_costs = pyo.Constraint(
-            rule=lambda m: m.grid_costs == sum(m.variable_tariff[t] * (m.e_buy[t] + m.e_sell[t])
+            rule=lambda m: m.grid_costs == sum(m.variable_tariff[t] * (m.e_buy[t] + m.e_sell[t]) * tariff_rate
                                                for t in m.time_index_p))
 
     def create_variable_peak_tariff(self,
