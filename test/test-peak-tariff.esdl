@@ -885,50 +885,68 @@
           <element xsi:type="esdl:ProfileElement" from="2050-01-01T01:00:00.000000" to="2050-01-01T07:00:00.000000" value="0.5"/>
           <element xsi:type="esdl:ProfileElement" from="2050-01-01T07:00:00.000000" to="2050-01-01T10:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-01-01T10:00:00.000000" to="2050-01-01T16:00:00.000000" value="0.5"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-01-01T16:00:00.000000" to="2050-01-01T23:00:00.000000" value="1.0"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-01-01T23:00:00.000000" to="2050-01-02T00:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-02-01T00:00:00.000000" to="2050-02-01T01:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-02-01T01:00:00.000000" to="2050-02-01T07:00:00.000000" value="0.5"/>
           <element xsi:type="esdl:ProfileElement" from="2050-02-01T07:00:00.000000" to="2050-02-01T10:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-02-01T10:00:00.000000" to="2050-02-01T16:00:00.000000" value="0.5"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-02-01T16:00:00.000000" to="2050-02-01T23:00:00.000000" value="1.0"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-02-01T23:00:00.000000" to="2050-02-02T00:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-03-01T00:00:00.000000" to="2050-03-01T01:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-03-01T01:00:00.000000" to="2050-03-01T07:00:00.000000" value="0.5"/>
           <element xsi:type="esdl:ProfileElement" from="2050-03-01T07:00:00.000000" to="2050-03-01T10:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-03-01T10:00:00.000000" to="2050-03-01T16:00:00.000000" value="0.5"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-03-01T16:00:00.000000" to="2050-03-01T23:00:00.000000" value="1.0"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-03-01T23:00:00.000000" to="2050-03-02T00:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-04-01T00:00:00.000000" to="2050-04-01T03:00:00.000000" value="0.5"/>
           <element xsi:type="esdl:ProfileElement" from="2050-04-01T03:00:00.000000" to="2050-04-01T10:00:00.000000" value="0.3"/>
           <element xsi:type="esdl:ProfileElement" from="2050-04-01T10:00:00.000000" to="2050-04-01T17:00:00.000000"/>
           <element xsi:type="esdl:ProfileElement" from="2050-04-01T17:00:00.000000" to="2050-04-01T19:00:00.000000" value="0.3"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-04-01T19:00:00.000000" to="2050-04-02T00:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-05-01T00:00:00.000000" to="2050-05-01T03:00:00.000000" value="0.5"/>
           <element xsi:type="esdl:ProfileElement" from="2050-05-01T03:00:00.000000" to="2050-05-01T10:00:00.000000" value="0.3"/>
           <element xsi:type="esdl:ProfileElement" from="2050-05-01T10:00:00.000000" to="2050-05-01T17:00:00.000000"/>
           <element xsi:type="esdl:ProfileElement" from="2050-05-01T17:00:00.000000" to="2050-05-01T19:00:00.000000" value="0.3"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-05-01T19:00:00.000000" to="2050-05-02T00:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-06-01T00:00:00.000000" to="2050-06-01T03:00:00.000000" value="0.5"/>
           <element xsi:type="esdl:ProfileElement" from="2050-06-01T03:00:00.000000" to="2050-06-01T10:00:00.000000" value="0.3"/>
           <element xsi:type="esdl:ProfileElement" from="2050-06-01T10:00:00.000000" to="2050-06-01T17:00:00.000000"/>
           <element xsi:type="esdl:ProfileElement" from="2050-06-01T17:00:00.000000" to="2050-06-01T19:00:00.000000" value="0.3"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-06-01T19:00:00.000000" to="2050-06-02T00:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-07-01T00:00:00.000000" to="2050-07-01T03:00:00.000000" value="0.5"/>
           <element xsi:type="esdl:ProfileElement" from="2050-07-01T03:00:00.000000" to="2050-07-01T10:00:00.000000" value="0.3"/>
           <element xsi:type="esdl:ProfileElement" from="2050-07-01T10:00:00.000000" to="2050-07-01T17:00:00.000000"/>
           <element xsi:type="esdl:ProfileElement" from="2050-07-01T17:00:00.000000" to="2050-07-01T19:00:00.000000" value="0.3"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-07-01T19:00:00.000000" to="2050-07-02T00:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-08-01T00:00:00.000000" to="2050-08-01T03:00:00.000000" value="0.5"/>
           <element xsi:type="esdl:ProfileElement" from="2050-08-01T03:00:00.000000" to="2050-08-01T10:00:00.000000" value="0.3"/>
           <element xsi:type="esdl:ProfileElement" from="2050-08-01T10:00:00.000000" to="2050-08-01T17:00:00.000000"/>
           <element xsi:type="esdl:ProfileElement" from="2050-08-01T17:00:00.000000" to="2050-08-01T19:00:00.000000" value="0.3"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-08-01T19:00:00.000000" to="2050-08-02T00:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-09-01T00:00:00.000000" to="2050-09-01T03:00:00.000000" value="0.5"/>
           <element xsi:type="esdl:ProfileElement" from="2050-09-01T03:00:00.000000" to="2050-09-01T10:00:00.000000" value="0.3"/>
           <element xsi:type="esdl:ProfileElement" from="2050-09-01T10:00:00.000000" to="2050-09-01T17:00:00.000000"/>
           <element xsi:type="esdl:ProfileElement" from="2050-09-01T17:00:00.000000" to="2050-09-01T19:00:00.000000" value="0.3"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-09-01T19:00:00.000000" to="2050-09-02T00:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-10-01T00:00:00.000000" to="2050-10-01T01:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-10-01T01:00:00.000000" to="2050-10-01T07:00:00.000000" value="0.5"/>
           <element xsi:type="esdl:ProfileElement" from="2050-10-01T07:00:00.000000" to="2050-10-01T10:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-10-01T10:00:00.000000" to="2050-10-01T16:00:00.000000" value="0.5"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-10-01T16:00:00.000000" to="2050-10-01T23:00:00.000000" value="1.0"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-10-01T23:00:00.000000" to="2050-10-02T00:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-11-01T00:00:00.000000" to="2050-11-01T01:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-11-01T01:00:00.000000" to="2050-11-01T07:00:00.000000" value="0.5"/>
           <element xsi:type="esdl:ProfileElement" from="2050-11-01T07:00:00.000000" to="2050-11-01T10:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-11-01T10:00:00.000000" to="2050-11-01T16:00:00.000000" value="0.5"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-11-01T16:00:00.000000" to="2050-11-01T23:00:00.000000" value="1.0"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-11-01T23:00:00.000000" to="2050-11-02T00:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-12-01T00:00:00.000000" to="2050-12-01T01:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-12-01T01:00:00.000000" to="2050-12-01T07:00:00.000000" value="0.5"/>
           <element xsi:type="esdl:ProfileElement" from="2050-12-01T07:00:00.000000" to="2050-12-01T10:00:00.000000" value="0.7"/>
           <element xsi:type="esdl:ProfileElement" from="2050-12-01T10:00:00.000000" to="2050-12-01T16:00:00.000000" value="0.5"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-12-01T16:00:00.000000" to="2050-12-01T23:00:00.000000" value="1.0"/>
+          <element xsi:type="esdl:ProfileElement" from="2050-12-01T23:00:00.000000" to="2050-12-02T00:00:00.000000" value="0.7"/>
         </variableOperationalCosts>
       </costInformation>
     </measure>

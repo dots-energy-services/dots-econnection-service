@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import random
 from typing import List
@@ -29,7 +29,10 @@ class EmsTestParam:
     esdl_file : str
     congestion_signal_kw : float = 0.0
 
-class Test(unittest.TestCase):
+class EmsTest(unittest.TestCase):
+
+    def setUp(self):
+        CalculationServiceHelperFunctions.get_simulator_configuration_from_environment = simulator_environment_e_connection
 
     def load_esdl_file(self, file_path):
         esh = EnergySystemHandler()
@@ -65,8 +68,23 @@ class Test(unittest.TestCase):
         edemand_param["house_temperatures"] = [291.85009999999994, 288.3497627218783]
         return edemand_param
 
-    def setUp(self):
-        CalculationServiceHelperFunctions.get_simulator_configuration_from_environment = simulator_environment_e_connection
+class TestEmsHelperFunctions(EmsTest):
+    
+    def test_given_tou_active_correct_weights_are_put_in_horizon(self):
+        test_examples = [
+            (datetime(2024, 3, 31, 22, 0, 0), 4 * [1.0] + 4 * [0.7] + 12 * [0.5] + 28 * [0.3] ),
+            (datetime(2024, 1, 1, 0, 0, 0), 4 * [0.7] + 24 * [0.5] + 12 * [0.7] + 8 * [0.5] )
+        ]
+        for i in range(0, len(test_examples)):
+            with self.subTest(i=i, params = test_examples[i]):
+                energy_system = self.load_esdl_file('test-peak-tariff.esdl')
+                service = self.init_e_connection_service(energy_system)
+                from_date = test_examples[i][0]
+                weight_vals = service.get_variable_tariffs_in_quarterly_values(from_date, from_date + timedelta(seconds=900*48), 900)
+                expected_weight_vals = test_examples[i][1]
+                self.assertListEqual(weight_vals, expected_weight_vals)
+
+class TestEmsOptimization(EmsTest):
 
     def test_different_tariff_instruments(self):
         test_examples = [
