@@ -667,7 +667,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                 self.static_bw_powers = {esdl_id: self.esdl_entity_parser.get_capacity_from_econnection(self.esdl_objects[esdl_id]) for esdl_id
                                          in self.simulator_configuration.esdl_ids}
 
-            if measure.name == 'variable_tariff':
+            if 'variable_tariff' in measure.name or 'time of use' in measure.name:
                 LOGGER.info("Variable tariff detected")
                 self.is_variable_tariff = True
                 self.variable_tariff : ParsedDateTimeProfile = ParsedDateTimeProfile(measure.costInformation.variableOperationalCosts)
