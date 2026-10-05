@@ -113,6 +113,22 @@ class TestEmsOptimization(EmsTest):
                 for expected_outcome in test_param.expected_outcomes:
                     self.assertIn(expected_outcome, ret_val.keys())
 
+    def test_given_congestion_signal_active_when_hybrid_heat_pump_is_present_then_gass_consumption_is_calculated(self):
+        energy_system = self.load_esdl_file(str(Path(__file__).parent / 'test-hhp-gass-consumption.esdl'))
+        service = self.init_e_connection_service(energy_system)
+
+        edemand_param = self.get_default_set_params()
+        edemand_param["house_temperatures"] = [290.85, 278.3497627218783]
+        edemand_param["buffer_temperature"] = 298.15
+        edemand_param["congestion_signal"] = 2*1.0e-6
+        edemand_param["potential_active_power"] = [0.0] * 48
+
+        # Execute
+        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 15, 0), TimeStepInformation(1,96), "1412f71f-a9d2-4c66-a834-385cf91c3767", energy_system)
+        self.assertIn("hybrid_heat_pump_gass_consumption", ret_val.keys())
+        self.assertGreater(ret_val["hybrid_heat_pump_gass_consumption"], 0.0)
+        self.assertGreater(ret_val["heat_power_to_house_hhp"], 0.0)
+
     def test_different_assets(self):
         test_examples = [
             EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv", "active_power_to_charge", "aggregated_active_power", "aggregated_reactive_power", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-battery.esdl')),

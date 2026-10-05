@@ -15,6 +15,7 @@ class PortfolioOptimizationProblem:
     def __init__(self, esdl_entity_parser : EsdlEntityParameterParser, highspy_interface : highspy.Highs):
         self.model = pyo.ConcreteModel()
         self.has_heat_pump = False
+        self.has_hybrid_heat_pump = False
         self.esdl_entity_parser = esdl_entity_parser
         self.highspy_interface = highspy.Highs()
 
@@ -362,19 +363,6 @@ class PortfolioOptimizationProblem:
             m.T_buffer[t] <= m.T_buffer_max
         )
 
-        '''
-        # pyo.Constraints for not heating house over maximum temperature
-        self.model.con_heat_to_house_z = pyo.Constraint(
-            self.model.time_index_soc, rule=lambda m, t:
-            (m.T_i[t] - m.T_house_max) <= 1.0e5 * m.z_upper_bound[t]
-        )
-
-        # Q cannot cause (hence t+1) T to go above the uppper bound
-        self.model.con_heat_to_house_q = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            m.Q_to_house[t] <= (1 - m.z_upper_bound[t + 1]) * m.C_buffer * (m.T_buffer_max - m.T_buffer_min)/m.dt
-        )
-        '''
         if not self.exceed_upper_temp_house_2(heat_pump, house_temperatures, air_temperature, soil_temperature,
                                               solar_irradiance, capacitance_matrix, conductance_matrix,
                                               conductance_matrix_amb):
@@ -510,6 +498,7 @@ class PortfolioOptimizationProblem:
         self.model.Q_to_buffer = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.Q_to_house = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.p_hhp = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        self.model.v_gass_m3 = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.z_on = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
 
         # Temperatures
@@ -599,11 +588,13 @@ class PortfolioOptimizationProblem:
         self.model.con_update_T_out = pyo.Constraint(self.model.time_index_p, rule=constraint_update_T_out)
 
         # definition pyo.Constraint
+        calorific_value_gass_kwh_m3 = 10 
         self.model.con_P = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.Q_to_buffer[t] == m.p_hhp[t] * m.cop[t]
+            m.Q_to_buffer[t] == m.p_hhp[t] * m.cop[t] + calorific_value_gass_kwh_m3 * m.v_gass_m3[t]
         )
         self.has_heat_pump = True
+        self.has_hybrid_heat_pump = True
 
     def create_energy_balance(self, asset_portfolio: dict):
         self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
@@ -688,6 +679,7 @@ class PortfolioOptimizationProblem:
                 slack_costs = sum(1.0e3 * m.slack_soc_min[t] + 1.0e3 * m.slack_soc_max[t] for t in m.time_index_p)
             else:
                 slack_costs = 0.0
+                
             costs = m.buy_costs - m.sell_rev + slack_costs
             if is_grid_tariff:
                 costs += m.grid_costs
@@ -750,9 +742,14 @@ class PortfolioOptimizationProblem:
         else:
             buy_prices = len(self.model.time_index_p) * [static_price]
 
-        # Convert e_buy from J to kWh to match the price unit Eur/kWh
-        self.model.buy_costs_def = pyo.Constraint(
-            rule=lambda m: m.buy_costs == sum(buy_prices[t] * m.e_buy[t] for t in m.time_index_p))
+        gass_prices = len(self.model.time_index_p) * [1.0] # TODO: make dependent on scenario
+        if self.has_hybrid_heat_pump:
+            self.model.buy_costs_def = pyo.Constraint(
+                rule=lambda m: m.buy_costs == sum(m.v_gass_m3[t] * gass_prices[t] + buy_prices[t] * m.e_buy[t] for t in m.time_index_p))
+        else:
+            self.model.buy_costs_def = pyo.Constraint(
+                rule=lambda m: m.buy_costs == sum(buy_prices[t] * m.e_buy[t] for t in m.time_index_p))
+        
 
 
     def solve(self, mip_gap):
@@ -783,12 +780,12 @@ class PortfolioOptimizationProblem:
     def _create_static_bw_tariff(self,
                                 static_bw_price_low: float,
                                 static_bw_price_high: float,
-                                static_bw_power: float,
+                                static_bw_power_kw: float,
                                 time_index : pyo.RangeSet):
 
         self.model.static_bw_price_low = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_low)
         self.model.static_bw_price_high = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_high)
-        self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_power)
+        self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_power_kw)
 
         self.model.static_bw_costs = pyo.Var(time_index, within=pyo.NonNegativeReals, initialize=0)
         self.model.grid_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
@@ -798,7 +795,7 @@ class PortfolioOptimizationProblem:
         self.model.con_bw_low = pyo.Constraint(
             time_index, rule=lambda m, t:
             # eur/kWh x kWh
-            m.static_bw_price_high * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
+            m.static_bw_price_low * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
         self.model.con_bw_high = pyo.Constraint(
             time_index, rule=lambda m, t:
@@ -817,10 +814,10 @@ class PortfolioOptimizationProblem:
         self._create_static_bw_tariff(static_bw_price_low, static_bw_price_high, static_bw_power, self.model.time_index_p)
 
     def create_static_bw_tariff_1_time_step(self,
-                                        static_bw_power: float):
+                                        static_bw_power_kw: float):
 
         big_costs_constant = 5000
-        self._create_static_bw_tariff(big_costs_constant, big_costs_constant, static_bw_power, self.model.time_index_p1)
+        self._create_static_bw_tariff(big_costs_constant, big_costs_constant, static_bw_power_kw, self.model.time_index_p1)
 
 
     def create_variable_tariff(self, variable_tariff: list, tariff_rate : float):
