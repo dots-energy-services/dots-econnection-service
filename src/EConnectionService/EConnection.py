@@ -8,7 +8,7 @@ from dots_infrastructure.EsdlProfileParsingClasses import ParsedDateTimeProfile,
 from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation, TimeRequestType
 from dots_infrastructure.HelicsFederateHelpers import HelicsSimulationExecutor
 from dots_infrastructure.Logger import LOGGER
-from esdl import DateTimeProfile, ElectricityDemand, ElectricityNetwork, HeatDemandTypeEnum, HeatingDemand, OutPort, esdl, EnergySystem
+from esdl import DateTimeProfile, ElectricityDemand, ElectricityNetwork, HeatDemandTypeEnum, HeatPump, HeatingDemand, HybridHeatPump, OutPort, esdl, EnergySystem
 
 import json
 import numpy as np
@@ -178,6 +178,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         self.static_prices: dict[EsdlId, float] = {}
         self.dynamic_flat_prices: dict[EsdlId, float] = {}
         self.esdl_entity_parser = EsdlEntityParameterParser()
+        self.hw_heating_demand_profiles: dict[EsdlId, ParsedTimeSeriesProfile] = {}
 
         # Fixed global data, the same for all econnections
         self.optimization_horizon = 48  # number of time steps
@@ -239,6 +240,8 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                         raise ValueError(f'There was already a {asset_name} connected to Econnection {econnection.id}')
                     else:
                         asset_portfolio[asset_name] = {'esdl_object': asset, 'phases': self.get_phases_from_asset(asset)}
+                        if asset_name == "HeatPump" or asset_name == "HybridHeatPump":
+                            self._store_dhw_profile_in_chache(asset)
                 if isinstance(asset, ElectricityNetwork):
                     for port in asset.port:
                         if isinstance(port, OutPort):
@@ -252,6 +255,13 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             asset_portfolio[type(e_demand).__name__] = {'esdl_object': e_demand, 'phases': e_demand_phases}
 
         return asset_portfolio
+
+    def _store_dhw_profile_in_chache(self, asset):
+        dhw_demand = self.get_hot_water_demand_profile(asset)
+        if dhw_demand is not None:
+            dhw_profile = dhw_demand.port[1].profile[0]
+            profile = ParsedTimeSeriesProfile(dhw_profile)
+            self.hw_heating_demand_profiles[asset.id] = profile
 
     @staticmethod
     def get_phases_from_asset(asset: esdl.EnergyAsset) -> list:
@@ -323,7 +333,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                                               param_dict: dict,
                                               time_step_number: TimeStepInformation,
                                               esdl_id: EsdlId,
-                                              congestion_signal : float,
+                                              congestion_signal_kw : float,
                                               simulation_time : datetime):
         """
         Builds the optimization problem in the following steps:
@@ -384,14 +394,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                 dhw_temperature = get_single_param_with_name(param_dict, "dhw_temperature")
                 dhw_temperature = round(dhw_temperature, self.round_decimals)
 
-                dhw_demand = self.get_hot_water_demand_profile(heat_pump)
-                dhw_profile = dhw_demand.port[1].profile[0]
-                profile = ParsedTimeSeriesProfile(dhw_profile)
-                from_date = simulation_time
-                to_date = simulation_time + timedelta(seconds=self.ems_time_step_seconds * self.optimization_horizon)
-                dhw_profile_slice = profile.get_data_in_timeseries_format(from_date, to_date, self.ems_time_step_seconds)
-
-                dhw_profile_slice = [round(value, self.round_decimals) for value in dhw_profile_slice]
+                dhw_profile_slice = self._get_hot_water_demand_slice(simulation_time, heat_pump)
 
                 problem.create_heat_pump(heat_pump,
                                          dhw_temperature,
@@ -404,13 +407,14 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
             else:
                 hybrid_heat_pump = asset_portfolio['HybridHeatPump']['esdl_object']
-
+                dhw_profile_slice = self._get_hot_water_demand_slice(simulation_time, hybrid_heat_pump)
                 problem.create_hybrid_heat_pump(hybrid_heat_pump,
                                                 buffer_temperature,
                                                 house_temperatures,
                                                 air_temperature,
                                                 soil_temperature,
-                                                solar_irradiance)
+                                                solar_irradiance,
+                                                dhw_profile_slice)
 
         if 'EVChargingStation' in asset_portfolio:
             ev_charging_station = asset_portfolio['EVChargingStation']['esdl_object']
@@ -442,9 +446,10 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                                             self.static_bw_price_high,
                                             self.static_bw_powers[esdl_id])
 
-        if congestion_signal > 0 and self.congestion_management_active:
+        if congestion_signal_kw > 0 and self.congestion_management_active:
             is_grid_tariff = True
-            problem.create_static_bw_tariff_1_time_step(congestion_signal)
+            LOGGER.debug(f"setting congestion signal: {congestion_signal_kw} kW")
+            problem.create_static_bw_tariff_1_time_step(congestion_signal_kw)
         if self.is_variable_tariff:
             is_grid_tariff = True
             variable_peak_tariff_vals = self.get_variable_tariffs_in_quarterly_values(simulation_time, simulation_time + timedelta(seconds=self.optimization_horizon * self.ems_time_step_seconds), self.ems_time_step_seconds)
@@ -458,7 +463,18 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         return problem
 
-    def get_hot_water_demand_profile(self, heat_pump) -> HeatingDemand:
+    def _get_hot_water_demand_slice(self, simulation_time, heat_pump : HybridHeatPump | HeatPump):
+        profile = self.hw_heating_demand_profiles.get(heat_pump.id, None)
+        if profile is None:
+            raise ValueError(f'No hot water demand profile found for HeatPump {heat_pump.id}')
+        from_date = simulation_time
+        to_date = simulation_time + timedelta(seconds=self.ems_time_step_seconds * self.optimization_horizon)
+        dhw_profile_slice = profile.get_data_in_timeseries_format(from_date, to_date, self.ems_time_step_seconds)
+
+        dhw_profile_slice = [round(value, self.round_decimals) for value in dhw_profile_slice]
+        return dhw_profile_slice
+
+    def get_hot_water_demand_profile(self, heat_pump : HybridHeatPump | HeatPump) -> HeatingDemand:
         connected_ports = [port for port in heat_pump.port if len(port.connectedTo) > 0]
         for connected_port in connected_ports:
             for entity in connected_port.connectedTo:
@@ -576,6 +592,9 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             ret_val["heat_power_to_buffer_hhp"] = problem.get_first_value_from_component('Q_to_buffer') * 1000
             ret_val["heat_power_to_house_hhp"] = problem.get_first_value_from_component('Q_to_house') * 1000
             self.influx_connector.set_time_step_data_point(esdl_id, 'active_dispatch_hhp', simulation_time, p_hhp_w)
+            v_gass_m3 = problem.get_first_value_from_component('v_gass_m3')
+            LOGGER.debug(f"Gass burned: {v_gass_m3} m3")
+            self.influx_connector.set_time_step_data_point(esdl_id, 'hhp_gass_consumption', simulation_time, v_gass_m3)
 
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'HybridHeatPump', p_hhp_w)
             aggregated_active_power += p
@@ -604,7 +623,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         ret_val['aggregated_active_power'] = aggregated_active_power.tolist()
         ret_val['aggregated_reactive_power'] = aggregated_reactive_power.tolist()
         ret_val['predicted_aggregated_active_power'] = predicted_aggregated_active_power.tolist()
-        ret_val['predicted_aggregated_reactive_power'] = predicted_aggregated_reactive_power.tolist()
+        ret_val['predicted_aggregated_reactive_power'] = predicted_aggregated_reactive_power.tolist() 
 
         return ret_val
 

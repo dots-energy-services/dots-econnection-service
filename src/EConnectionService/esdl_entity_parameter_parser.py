@@ -30,10 +30,14 @@ class GeneralHeatpumpParameters:
     house_temp_max : float
     house_temp_hor : float
     house_temp_0 : float
+    dhw_temp_set : float
+    dhw_temp_tap : float
 
 @dataclass
 class HybridHeatPumpParameters(GeneralHeatpumpParameters):
     heat_thermal_power_kw : float
+    gass_heater_efficiency : float
+    gass_heater_thermal_power_kw : float
 
 @dataclass
 class HeatPumpParameters(GeneralHeatpumpParameters):
@@ -46,7 +50,6 @@ class HeatPumpParameters(GeneralHeatpumpParameters):
     dhw_temp_max : float
     dhw_temp_0 : float
     dhw_temp_hor : float
-    dhw_temp_tap : float
     cop_element : float
 
 @dataclass
@@ -110,7 +113,11 @@ class EsdlEntityParameterParser:
                 buffer_temp_min=hhp_d['buffer_temp_min'],
                 buffer_temp_max=hhp_d['buffer_temp_max'],
                 buffer_temp_0=hhp_d['buffer_temp_0'],
-                buffer_temp_hor=hhp_d['buffer_temp_hor']
+                buffer_temp_hor=hhp_d['buffer_temp_hor'],
+                dhw_temp_set=hhp_d['dhw_temp_set'],
+                dhw_temp_tap=hhp_d['dhw_temp_tap'],
+                gass_heater_efficiency=hhp.gasHeaterEfficiency,
+                gass_heater_thermal_power_kw=hhp.gasHeaterThermalPower * 0.001
             )
         return self._hybrid_heatpump_cache[key]
 
