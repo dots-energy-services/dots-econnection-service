@@ -444,6 +444,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         if congestion_signal_kw > 0 and self.congestion_management_active:
             is_grid_tariff = True
+            LOGGER.debug(f"setting congestion signal: {congestion_signal_kw} kW")
             problem.create_static_bw_tariff_1_time_step(congestion_signal_kw)
         if self.is_variable_tariff:
             is_grid_tariff = True
@@ -577,6 +578,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             ret_val["heat_power_to_house_hhp"] = problem.get_first_value_from_component('Q_to_house') * 1000
             self.influx_connector.set_time_step_data_point(esdl_id, 'active_dispatch_hhp', simulation_time, p_hhp_w)
             v_gass_m3 = problem.get_first_value_from_component('v_gass_m3')
+            LOGGER.debug(f"Gass burned: {v_gass_m3} m3")
             self.influx_connector.set_time_step_data_point(esdl_id, 'hhp_gass_consumption', simulation_time, v_gass_m3)
 
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'HybridHeatPump', p_hhp_w)
