@@ -323,7 +323,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                                               param_dict: dict,
                                               time_step_number: TimeStepInformation,
                                               esdl_id: EsdlId,
-                                              congestion_signal_kw : float,
+                                              congestion_signal : float,
                                               simulation_time : datetime):
         """
         Builds the optimization problem in the following steps:
@@ -442,10 +442,9 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                                             self.static_bw_price_high,
                                             self.static_bw_powers[esdl_id])
 
-        if congestion_signal_kw > 0 and self.congestion_management_active:
+        if congestion_signal > 0 and self.congestion_management_active:
             is_grid_tariff = True
-            LOGGER.debug(f"setting congestion signal: {congestion_signal_kw} kW")
-            problem.create_static_bw_tariff_1_time_step(congestion_signal_kw)
+            problem.create_static_bw_tariff_1_time_step(congestion_signal)
         if self.is_variable_tariff:
             is_grid_tariff = True
             variable_peak_tariff_vals = self.get_variable_tariffs_in_quarterly_values(simulation_time, simulation_time + timedelta(seconds=self.optimization_horizon * self.ems_time_step_seconds), self.ems_time_step_seconds)
@@ -577,9 +576,6 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             ret_val["heat_power_to_buffer_hhp"] = problem.get_first_value_from_component('Q_to_buffer') * 1000
             ret_val["heat_power_to_house_hhp"] = problem.get_first_value_from_component('Q_to_house') * 1000
             self.influx_connector.set_time_step_data_point(esdl_id, 'active_dispatch_hhp', simulation_time, p_hhp_w)
-            v_gass_m3 = problem.get_first_value_from_component('v_gass_m3')
-            LOGGER.debug(f"Gass burned: {v_gass_m3} m3")
-            self.influx_connector.set_time_step_data_point(esdl_id, 'hhp_gass_consumption', simulation_time, v_gass_m3)
 
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'HybridHeatPump', p_hhp_w)
             aggregated_active_power += p
@@ -608,7 +604,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         ret_val['aggregated_active_power'] = aggregated_active_power.tolist()
         ret_val['aggregated_reactive_power'] = aggregated_reactive_power.tolist()
         ret_val['predicted_aggregated_active_power'] = predicted_aggregated_active_power.tolist()
-        ret_val['predicted_aggregated_reactive_power'] = predicted_aggregated_reactive_power.tolist() 
+        ret_val['predicted_aggregated_reactive_power'] = predicted_aggregated_reactive_power.tolist()
 
         return ret_val
 
