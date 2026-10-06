@@ -113,7 +113,7 @@ class TestEmsOptimization(EmsTest):
                 for expected_outcome in test_param.expected_outcomes:
                     self.assertIn(expected_outcome, ret_val.keys())
 
-    def test_given_congestion_signal_active_when_hybrid_heat_pump_is_present_then_gass_consumption_is_calculated(self):
+    def test_given_congestion_signal_active_and_hybrid_heat_pump_is_present_and_gass_is_cheapest_then_gass_consumption_is_at_least_hot_water_demand(self):
         energy_system = self.load_esdl_file(str(Path(__file__).parent / 'test-hhp-gass-consumption.esdl'))
         service = self.init_e_connection_service(energy_system)
 
@@ -124,9 +124,24 @@ class TestEmsOptimization(EmsTest):
         edemand_param["potential_active_power"] = [0.0] * 48
 
         # Execute
-        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 15, 0), TimeStepInformation(1,96), "1412f71f-a9d2-4c66-a834-385cf91c3767", energy_system)
+        q_hot_water = 0.0082480710300739 * 4183/3.6e6 * (328.15 - 288.15)
+        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,1, 0, 15, 0), TimeStepInformation(18,96), "1412f71f-a9d2-4c66-a834-385cf91c3767", energy_system)
         gass_consumption_datapoint : SimulaitonDataPoint = next(dp for dp in service.influx_connector.data_points if dp.output_name == "hhp_gass_consumption")
-        self.assertGreater(gass_consumption_datapoint.value, 0.0)
+        self.assertGreater(gass_consumption_datapoint.value, q_hot_water / 10 )
+
+    def test_given_hybrid_heat_pump_is_present_then_gass_consumption_for_hot_water_is_calculated(self):
+            energy_system = self.load_esdl_file(str(Path(__file__).parent / 'test-hhp-gass-consumption.esdl'))
+            service = self.init_e_connection_service(energy_system)
+    
+            edemand_param = self.get_default_set_params()
+            edemand_param["house_temperatures"] = [290.85, 278.3497627218783]
+            edemand_param["buffer_temperature"] = 298.15
+            edemand_param["congestion_signal"] = 0.0
+    
+            # Execute
+            ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,1, 0, 0, 0) + timedelta(seconds=18*900), TimeStepInformation(18,96), "1412f71f-a9d2-4c66-a834-385cf91c3767", energy_system)
+            gass_consumption_datapoint : SimulaitonDataPoint = next(dp for dp in service.influx_connector.data_points if dp.output_name == "hhp_gass_consumption")
+            self.assertGreater(gass_consumption_datapoint.value, 0.0)
 
     def test_different_assets(self):
         test_examples = [

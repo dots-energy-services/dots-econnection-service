@@ -442,7 +442,8 @@ class PortfolioOptimizationProblem:
                                 house_temperatures: list,
                                 air_temperature: list,
                                 soil_temperature: list,
-                                solar_irradiance: list):
+                                solar_irradiance: list,
+                                dhw_profile: list):
 
         air_temperature_dict = self.it2dict(air_temperature)
         soil_temperature_dict = self.it2dict(soil_temperature)
@@ -460,6 +461,12 @@ class PortfolioOptimizationProblem:
         hybrid_heat_pump_params = self.esdl_entity_parser.get_hybridheatpump_parameters(hybrid_heat_pump)
 
         capacitance_matrix = np.diag(np.array([building_params.C_in_kwh, building_params.C_out_kwh]))
+        heat_capacity_water = 4183/3.6e6
+        dhw_heat_profile = np.array(dhw_profile) * heat_capacity_water * (hybrid_heat_pump_params.dhw_temp_set - hybrid_heat_pump_params.dhw_temp_tap)
+        dhw_heat_profile_dict = self.it2dict(dhw_heat_profile)
+
+        # DHW
+        self.model.Q_to_dhw_hhp = pyo.Param(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=dhw_heat_profile_dict)
 
         k_exch = 1.0 / building_params.R_exch
         k_floor = 1.0 / building_params.R_floor
@@ -589,10 +596,21 @@ class PortfolioOptimizationProblem:
         self.model.con_update_T_out = pyo.Constraint(self.model.time_index_p, rule=constraint_update_T_out)
 
         # definition pyo.Constraint
-        calorific_value_gass_kwh_m3 = 10 
+        calorific_value_gass_kwh_m3 = 10
+        # define max gass consumption in 15 minutes
+        # check gass consumption for hot water profile
+        max_gass_consumption_15_min = hybrid_heat_pump_params.gass_heater_thermal_power_kw / calorific_value_gass_kwh_m3 * 0.25
+        self.model.con_gass_limit = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            m.v_gass_m3[t] <= max_gass_consumption_15_min
+        )
+        self.model.con_gass_hw = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            calorific_value_gass_kwh_m3 * m.v_gass_m3[t] * hybrid_heat_pump_params.gass_heater_efficiency >= m.Q_to_dhw_hhp[t]
+        )
         self.model.con_P = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.Q_to_buffer[t] == m.p_hhp[t] * m.cop[t] + calorific_value_gass_kwh_m3 * m.v_gass_m3[t]
+            m.Q_to_buffer[t] == m.p_hhp[t] * m.cop[t] + (hybrid_heat_pump_params.gass_heater_efficiency * calorific_value_gass_kwh_m3 * m.v_gass_m3[t] - m.Q_to_dhw_hhp[t])
         )
         self.has_heat_pump = True
         self.has_hybrid_heat_pump = True
