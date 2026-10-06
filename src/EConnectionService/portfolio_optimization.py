@@ -16,6 +16,7 @@ class PortfolioOptimizationProblem:
         self.model = pyo.ConcreteModel()
         self.has_heat_pump = False
         self.has_hybrid_heat_pump = False
+        self.has_grid_tariff = False
         self.esdl_entity_parser = esdl_entity_parser
         self.highspy_interface = highspy.Highs()
 
@@ -777,19 +778,29 @@ class PortfolioOptimizationProblem:
         os.remove(filename)
 
 
+    def _create_initial_grid_costs(self):
+        if not self.has_grid_tariff:
+            self.model.grid_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
+            self.model.total_static_bw_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
+            self.model.variable_tariff_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
+            self.model.variable_peak_tariff_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
+            self.model.con_grid_costs = pyo.Constraint(
+                rule=lambda m: m.grid_costs == m.total_static_bw_costs + m.variable_peak_tariff_costs + m.variable_tariff_costs
+            )
+            self.has_grid_tariff = True
+
+
     def _create_static_bw_tariff(self,
                                 static_bw_price_low: float,
                                 static_bw_price_high: float,
                                 static_bw_power_kw: float,
                                 time_index : pyo.RangeSet):
 
+        self._create_initial_grid_costs()
         self.model.static_bw_price_low = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_low)
         self.model.static_bw_price_high = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_high)
         self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_power_kw)
-
         self.model.static_bw_costs = pyo.Var(time_index, within=pyo.NonNegativeReals, initialize=0)
-        self.model.grid_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
-
 
         # Constraints
         self.model.con_bw_low = pyo.Constraint(
@@ -802,9 +813,9 @@ class PortfolioOptimizationProblem:
             # eur/kWh x kWh
             m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
-        self.model.con_grid_costs = pyo.Constraint(
-            rule=lambda m: m.grid_costs == sum(m.static_bw_costs[t] for t in time_index)
-        )
+        self.model.con_total_static_bw_costs = pyo.Constraint(
+            rule=lambda m: m.total_static_bw_costs == sum(m.static_bw_costs[t] for t in time_index))
+
 
     def create_static_bw_tariff_full_horizon(self,
                                     static_bw_price_low: float,
@@ -821,19 +832,19 @@ class PortfolioOptimizationProblem:
 
 
     def create_variable_tariff(self, variable_tariff: list, tariff_rate : float):
+        self._create_initial_grid_costs()
         variable_tariff_dict = self.it2dict(variable_tariff)
         self.model.variable_tariff = pyo.Param(self.model.time_index_p, within=pyo.NonNegativeReals,
                                                initialize=variable_tariff_dict)
 
-        self.model.grid_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
-
-        self.model.con_grid_costs = pyo.Constraint(
-            rule=lambda m: m.grid_costs == sum(m.variable_tariff[t] * (m.e_buy[t] + m.e_sell[t]) * tariff_rate
+        self.model.con_variable_tariff_costs = pyo.Constraint(
+            rule=lambda m: m.variable_tariff_costs == sum(m.variable_tariff[t] * (m.e_buy[t] + m.e_sell[t]) * tariff_rate
                                                for t in m.time_index_p))
 
     def create_variable_peak_tariff(self,
                                     variable_peak_tariff: list,
                                     peak_costs: float):
+        self._create_initial_grid_costs()
         if peak_costs < 0.0:
             peak_costs = 0.0
 
@@ -850,8 +861,6 @@ class PortfolioOptimizationProblem:
         self.model.peak_costs = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.peak_costs_max = pyo.Var(within=pyo.NonNegativeReals, initialize=0.0)
 
-        self.model.grid_costs = pyo.Var(within=pyo.NonNegativeReals, initialize=0)
-
         # Constraints
         self.model.con_peak_costs = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
@@ -867,7 +876,7 @@ class PortfolioOptimizationProblem:
             rule=lambda m: m.peak_costs_max >= m.peak_costs_old
         )
 
-        self.model.con_grid_costs = pyo.Constraint(rule=lambda m: m.grid_costs == m.peak_costs_max)
+        self.model.con_variable_peak_tariff_costs = pyo.Constraint(rule=lambda m: m.variable_peak_tariff_costs == m.peak_costs_max)
 
     def exceed_upper_temp_house_2(self,
                                 heat_pump: esdl.EnergyAsset,
