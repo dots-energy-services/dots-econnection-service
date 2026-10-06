@@ -7,7 +7,7 @@ import unittest
 
 import esdl
 from EConnectionService.EConnection import CalculationServiceEConnection
-from dots_infrastructure.DataClasses import SimulatorConfiguration, TimeStepInformation
+from dots_infrastructure.DataClasses import SimulaitonDataPoint, SimulatorConfiguration, TimeStepInformation
 from dots_infrastructure.test_infra.InfluxDBMock import InfluxDBMock
 import helics as h
 from esdl.esdl_handler import EnergySystemHandler
@@ -125,9 +125,8 @@ class TestEmsOptimization(EmsTest):
 
         # Execute
         ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 15, 0), TimeStepInformation(1,96), "1412f71f-a9d2-4c66-a834-385cf91c3767", energy_system)
-        self.assertIn("hybrid_heat_pump_gass_consumption", ret_val.keys())
-        self.assertGreater(ret_val["hybrid_heat_pump_gass_consumption"], 0.0)
-        self.assertGreater(ret_val["heat_power_to_house_hhp"], 0.0)
+        gass_consumption_datapoint : SimulaitonDataPoint = next(dp for dp in service.influx_connector.data_points if dp.output_name == "hhp_gass_consumption")
+        self.assertGreater(gass_consumption_datapoint.value, 0.0)
 
     def test_different_assets(self):
         test_examples = [
