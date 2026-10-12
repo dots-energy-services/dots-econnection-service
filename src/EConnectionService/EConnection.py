@@ -620,6 +620,11 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             predicted_aggregated_active_power += p
             predicted_aggregated_reactive_power += q
 
+        buy_costs = problem.get_first_value_from_component('buy_costs')
+        sell_rev = problem.get_first_value_from_component('sell_rev')
+        total_costs_excluding_grid_tariffs = buy_costs - sell_rev
+        self.influx_connector.set_time_step_data_point(esdl_id, 'total_costs_ex_grid_tariffs', simulation_time, total_costs_excluding_grid_tariffs)
+
         ret_val['aggregated_active_power'] = aggregated_active_power.tolist()
         ret_val['aggregated_reactive_power'] = aggregated_reactive_power.tolist()
         ret_val['predicted_aggregated_active_power'] = predicted_aggregated_active_power.tolist()
