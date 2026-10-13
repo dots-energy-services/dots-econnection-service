@@ -425,7 +425,8 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         da_slice = get_single_param_with_name(param_dict, 'day_ahead_prices')
         da_slice_eur_kwh = [0.001 * price for price in da_slice]
 
-        problem.create_energy_balance(asset_portfolio)
+        capacity = self.esdl_entity_parser.get_capacity_from_econnection(self.esdl_objects[esdl_id])
+        problem.create_energy_balance(asset_portfolio, capacity)
         problem.create_buy_costs(self.energy_contracts[esdl_id],
                                  self.dynamic_flat_prices.get(esdl_id),  # possibly None
                                  self.static_prices.get(esdl_id),  # possibly None
@@ -622,6 +623,8 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         buy_costs = problem.get_first_value_from_component('buy_costs')
         sell_rev = problem.get_first_value_from_component('sell_rev')
+        LOGGER.info(f"Costs of buying: {buy_costs}")
+        LOGGER.info(f"Profit from selling: {sell_rev}")
         total_costs_excluding_grid_tariffs = buy_costs - sell_rev
         self.influx_connector.set_time_step_data_point(esdl_id, 'total_costs_ex_grid_tariffs', simulation_time, total_costs_excluding_grid_tariffs)
 

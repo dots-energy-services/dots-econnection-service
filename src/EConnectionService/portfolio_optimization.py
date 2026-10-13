@@ -615,12 +615,11 @@ class PortfolioOptimizationProblem:
         self.has_heat_pump = True
         self.has_hybrid_heat_pump = True
 
-    def create_energy_balance(self, asset_portfolio: dict):
+    def create_energy_balance(self, asset_portfolio: dict, capacity : float):
         self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
 
-        capacity = 17.0  # TODO: remove magic number
         self.model.con_energy_buy_ub = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
             m.e_buy[t] <= m.z_buy[t] * capacity * m.dt
@@ -699,7 +698,7 @@ class PortfolioOptimizationProblem:
             else:
                 slack_costs = 0.0
                 
-            costs = m.buy_costs - m.sell_rev + slack_costs
+            costs = m.total_buy_costs - m.total_sell_rev + slack_costs
             if is_grid_tariff:
                 costs += m.grid_costs
 
@@ -727,7 +726,8 @@ class PortfolioOptimizationProblem:
         - dynamic: price = flat_price + da_price or da_price if feed-in
         - static: price = static_price or feed_in_price if feed-in
         """
-        self.model.sell_rev = pyo.Var(within=pyo.Reals, initialize=0)
+        self.model.total_sell_rev = pyo.Var(within=pyo.Reals, initialize=0)
+        self.model.sell_rev = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
         if energy_contract == 'dynamic':
             if is_feed_in_tariff:
                 sell_prices = da_prices
@@ -741,7 +741,10 @@ class PortfolioOptimizationProblem:
 
         # Convert e_buy from J to kWh to match the price unit Eur/kWh
         self.model.sell_rev_def = pyo.Constraint(
-            rule=lambda m: m.sell_rev == sum(sell_prices[t] * m.e_sell[t] for t in m.time_index_p))
+                        self.model.time_index_p, rule=lambda m, t:
+                        m.sell_rev[t] == sell_prices[t] * m.e_sell[t])
+        self.model.total_sell_rev_def = pyo.Constraint(
+            rule=lambda m: m.total_sell_rev == sum(m.sell_rev[t] for t in m.time_index_p))
 
     def create_buy_costs(self,
                          energy_contract: str,
@@ -754,7 +757,8 @@ class PortfolioOptimizationProblem:
         - dynamic: price = flat_price + da_price
         - static: price = static_price
         """
-        self.model.buy_costs = pyo.Var(within=pyo.Reals, initialize=0)
+        self.model.total_buy_costs = pyo.Var(within=pyo.Reals, initialize=0)
+        self.model.buy_costs = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
         # Determine costs from buying energy
         if energy_contract == 'dynamic':
             buy_prices = [price + dynamic_flat_price for price in da_prices]
@@ -764,11 +768,16 @@ class PortfolioOptimizationProblem:
         gass_prices = len(self.model.time_index_p) * [1.0] # TODO: make dependent on scenario
         if self.has_hybrid_heat_pump:
             self.model.buy_costs_def = pyo.Constraint(
-                rule=lambda m: m.buy_costs == sum(m.v_gass_m3[t] * gass_prices[t] + buy_prices[t] * m.e_buy[t] for t in m.time_index_p))
+                self.model.time_index_p, rule=lambda m, t:
+                m.buy_costs[t] == m.v_gass_m3[t] * gass_prices[t] + buy_prices[t] * m.e_buy[t])
         else:
             self.model.buy_costs_def = pyo.Constraint(
-                rule=lambda m: m.buy_costs == sum(buy_prices[t] * m.e_buy[t] for t in m.time_index_p))
-        
+                            self.model.time_index_p, rule=lambda m, t:
+                            m.buy_costs[t] == buy_prices[t] * m.e_buy[t])
+
+        self.model.total_buy_costs_def = pyo.Constraint(
+            rule=lambda m: m.total_buy_costs == sum(m.buy_costs[t] for t in m.time_index_p))
+
 
 
     def solve(self, mip_gap):

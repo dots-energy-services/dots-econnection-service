@@ -77,7 +77,7 @@ class TestEmsHelperFunctions(EmsTest):
         ]
         for i in range(0, len(test_examples)):
             with self.subTest(i=i, params = test_examples[i]):
-                energy_system = self.load_esdl_file('test-peak-tariff.esdl')
+                energy_system = self.load_esdl_file(str(Path(__file__).parent / 'test-peak-tariff.esdl'))
                 service = self.init_e_connection_service(energy_system)
                 from_date = test_examples[i][0]
                 weight_vals = service.get_variable_tariffs_in_quarterly_values(from_date, from_date + timedelta(seconds=900*48), 900)
@@ -178,6 +178,7 @@ class TestEmsOptimization(EmsTest):
                 for expected_outcome in test_param.expected_outcomes:
                     self.assertIn(expected_outcome, ret_val.keys())
 
+
     def test_without_ems(self):
         energy_system = self.load_esdl_file(str(Path(__file__).parent /'test-without-ems.esdl'))
         service = self.init_e_connection_service(energy_system)
@@ -214,6 +215,19 @@ class TestEmsOptimization(EmsTest):
                 self.assertListEqual(ret_val[key], expected_predicted_reactive_power)
             else:
                 self.assertEqual(ret_val[key], 0.0)
+
+
+    def test_with_ems_and_static_contract(self):
+        energy_system = self.load_esdl_file(str(Path(__file__).parent / 'test-no-tariff-static-contract.esdl'))
+        service = self.init_e_connection_service(energy_system)
+
+        params = self.get_default_set_params()
+        esdl_id_to_test = "5c19dcff-b004-4644-99b9-f42d15a34f3a"
+        ret_val = service.calculate_dispatch(params, datetime(2024,1,14, 0, 15, 0), TimeStepInformation(1,96), esdl_id_to_test, energy_system)
+
+        cost_data_point : SimulaitonDataPoint = next(dp for dp in service.influx_connector.data_points if dp.output_name == "total_costs_ex_grid_tariffs")
+        self.assertNotEqual(cost_data_point.value, 0.0)
+
 
     def test_ev_model(self):
         energy_system = self.load_esdl_file(str(Path(__file__).parent /'test-ev-model.esdl'))
