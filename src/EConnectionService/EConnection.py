@@ -622,6 +622,8 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         buy_costs = problem.get_first_value_from_component('buy_costs')
         sell_rev = problem.get_first_value_from_component('sell_rev')
+        LOGGER.info(f"Costs of buying: {buy_costs}")
+        LOGGER.info(f"Profit from selling: {sell_rev}")
         total_costs_excluding_grid_tariffs = buy_costs - sell_rev
         self.influx_connector.set_time_step_data_point(esdl_id, 'total_costs_ex_grid_tariffs', simulation_time, total_costs_excluding_grid_tariffs)
 

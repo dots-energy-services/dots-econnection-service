@@ -215,5 +215,5 @@ class EsdlEntityParameterParser:
     def get_capacity_from_econnection(self, econnection: esdl.EConnection) -> float:
         key = econnection.id
         if key not in self._econnection_capacity_cache:
-            self._econnection_capacity_cache[key] = econnection.capacity * 0.001
+            self._econnection_capacity_cache[key] = econnection.capacity * 0.001 if econnection.capacity > 0 else 17.0
         return self._econnection_capacity_cache[key]
