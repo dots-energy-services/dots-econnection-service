@@ -60,6 +60,7 @@ class EVParameters:
     max_power_kw : float
     efficiency : float
     current_soc_kwh : float
+    min_soc_kwh : float
 
 @dataclass
 class BatteryParameters:

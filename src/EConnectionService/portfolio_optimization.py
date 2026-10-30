@@ -51,11 +51,13 @@ class PortfolioOptimizationProblem:
 
         # Parameters
         # Numbers
-
+        min_ch_rate_kw = 4.2
         self.model.init_soc_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.current_soc_kwh)
 
         self.model.ch_eff_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.efficiency)
         self.model.max_ch_rate_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.max_power_kw)
+        self.model.min_ch_rate_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=min_ch_rate_kw)
+        self.model.min_soc_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.min_soc_kwh)
 
         # Arrays
         # Create availability list
@@ -66,7 +68,7 @@ class PortfolioOptimizationProblem:
 
             for ptu in range(max(0, arrival_ptu), max(0, min(departure_ptu + 1, number_of_ptus)) ):
                 availability_ev[ptu] = 1
-                max_soc_ev[ptu] = departure_ptus_dict[departure_ptu]
+                max_soc_ev[ptu] = ev_params.max_soc_kwh
 
         self.model.availability_ev = pyo.Param(self.model.time_index_p, within=pyo.Binary,
                                                initialize=self.it2dict(availability_ev[:-1]))
@@ -74,27 +76,28 @@ class PortfolioOptimizationProblem:
         self.model.capacity_ev = pyo.Param(self.model.time_index_soc, within=pyo.NonNegativeReals, initialize=self.it2dict(max_soc_ev))
 
         # Variables
-        self.model.p_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        self.model.p_ev = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
         self.model.soc_ev = pyo.Var(self.model.time_index_soc, within=pyo.NonNegativeReals,
                                     initialize=self.model.init_soc_ev)
 
         self.model.con_soc_ev_0_low = pyo.Constraint(
             self.model.time_index_p1, rule=lambda m, t:
-            m.soc_ev[t] >= ev_params.current_soc_kwh
-        )
-        self.model.con_soc_ev_0_up = pyo.Constraint(
-            self.model.time_index_p1, rule=lambda m, t:
-            m.soc_ev[t] <= ev_params.current_soc_kwh + m.p_ev[t] * m.dt * m.ch_eff_ev
+            m.soc_ev[t] >= 0
         )
 
-        self.model.con_ev_ch_limit = pyo.Constraint(
+        self.model.con_upper_bound_ev_ch_rate = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.p_ev[t] <= m.availability_ev[t] * m.max_ch_rate_ev  # is 0 if the car is not there
+            m.p_ev[t] <= m.availability_ev[t] * m.max_ch_rate_ev * self.model.z_buy[t] - m.availability_ev[t] * m.min_ch_rate_ev * ( self.model.z_buy[t] - 1)
         )
 
-        self.model.con_soc_ev_min = pyo.Constraint(
-            self.model.time_index_soc, rule=lambda m, t:
-            m.soc_ev[t] >= 0.0
+        self.model.con_lower_bound_ev_ch_rate = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            m.p_ev[t] >= m.availability_ev[t] * m.min_ch_rate_ev * self.model.z_buy[t] - m.availability_ev[t] * m.max_ch_rate_ev * ( self.model.z_buy[t] - 1 )
+        )
+
+        self.model.con_v2g_soc_lower_bound = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            m.soc_ev[t] >= ev_params.min_soc_kwh
         )
 
         self.model.con_soc_ev_max = pyo.Constraint(
@@ -103,7 +106,7 @@ class PortfolioOptimizationProblem:
         )
 
         def arrival_constraint_f(model, t):
-            if t in arrival_ptus and t > 0:
+            if t in arrival_ptus and t > 0: # set ev soc to 0 when it arrives the time step before such that it can charge in its arrival ptu
                 arrival_soc = 0
                 return model.soc_ev[t-1] == arrival_soc
             else:
@@ -129,7 +132,7 @@ class PortfolioOptimizationProblem:
 
         self.model.con_soc_ev_dep_up = pyo.Constraint(self.model.time_index_p, rule=departure_constraint_f_up)
         self.model.con_soc_ev_dep_low = pyo.Constraint(self.model.time_index_p, rule=departure_constraint_f_low)
-
+        # TODO: SATISFY REQUIREMENT THAT DISCHARGING SOUHLD NEVER LEAD TO < 0.3 * MAXCHARGE SOC
         def soc_update_f(model, t):
             if (any(arr_ptu <= t <= dep_ptu for arr_ptu, dep_ptu in
                     zip(arrival_ptus, departure_ptus))) \
@@ -729,21 +732,26 @@ class PortfolioOptimizationProblem:
         """
         self.model.total_sell_rev = pyo.Var(within=pyo.Reals, initialize=0)
         self.model.sell_rev = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
+        sell_prices_ev = []
         if energy_contract == 'dynamic':
             if is_feed_in_tariff:
                 sell_prices = da_prices
+                sell_prices_ev = [price + dynamic_flat_price for price in da_prices]
             else:
                 sell_prices = [price + dynamic_flat_price for price in da_prices]
+                sell_prices_ev = sell_prices
         else:
             if is_feed_in_tariff:
                 sell_prices = len(self.model.time_index_p) * [feed_in_price]
+                sell_prices_ev = [price + dynamic_flat_price for price in da_prices]
             else:
                 sell_prices = len(self.model.time_index_p) * [static_price]
+                sell_prices_ev = sell_prices
 
         # Convert e_buy from J to kWh to match the price unit Eur/kWh
         self.model.sell_rev_def = pyo.Constraint(
                         self.model.time_index_p, rule=lambda m, t:
-                        m.sell_rev[t] == sell_prices[t] * m.e_sell[t])
+                        m.sell_rev[t] == sell_prices[t] * m.e_sell[t] + (sell_prices_ev[t] * -m.p_ev[t]))
         self.model.total_sell_rev_def = pyo.Constraint(
             rule=lambda m: m.total_sell_rev == sum(m.sell_rev[t] for t in m.time_index_p))
 
