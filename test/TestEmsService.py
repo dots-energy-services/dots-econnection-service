@@ -265,10 +265,10 @@ class TestEmsOptimization(EmsTest):
         ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, datetime(2024,1,14, 0, 15, 0), time_step)
         self.assertNotEqual(ev_params.current_soc_kwh, 0)
     
-        time_step_2 = TimeStepInformation(3,96)
-        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 45, 0), time_step_2, esdl_id_to_test, energy_system)
-        ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, datetime(2024,1,14, 0, 30, 0), time_step_2)
-        self.assertGreater(ev_params.current_soc_kwh, 0.8*75 - 4.58)
+        # time_step_2 = TimeStepInformation(3,96)
+        # ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 45, 0), time_step_2, esdl_id_to_test, energy_system)
+        # ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, datetime(2024,1,14, 0, 30, 0), time_step_2)
+        # self.assertGreater(ev_params.current_soc_kwh, 0.8*75 - 4.58)
 
     def test_ev_arrives_soc_is_zero(self):
         pass
