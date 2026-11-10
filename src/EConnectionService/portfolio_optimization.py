@@ -144,7 +144,8 @@ class PortfolioOptimizationProblem:
             if (any(arr_ptu <= t <= dep_ptu for arr_ptu, dep_ptu in
                     zip(arrival_ptus, departure_ptus))) \
                     and t < model.time_index_soc.last() and t > 0:
-                return model.soc_ev[t] == model.soc_ev[t-1] + (model.ch_eff_ev * model.p_ev[t] - 1 / model.ch_eff_ev * (model.p_ev_use[t] + model.p_ev_sell[t])) * model.dt
+                # m.soc[t + 1] == m.soc[t] + (m.ch_eff * m.p_ch[t] - 1 / m.dis_ch_eff * (m.p_bat_use[t] + m.p_bat_sell[t])) * m.dt
+                return model.soc_ev[t] == model.soc_ev[t-1] + (model.ch_eff_ev * model.p_ev[t-1] - 1 / model.ch_eff_ev * (model.p_ev_use[t-1] + model.p_ev_sell[t-1])) * model.dt
             else:
                 return pyo.Constraint.Skip
 
@@ -804,9 +805,11 @@ class PortfolioOptimizationProblem:
         self.model.write(filename, io_options={'symbolic_solver_labels': True})
         self.highspy_interface.clear()
         self.highspy_interface.setOptionValue('mip_rel_gap', mip_gap)
+        self.highspy_interface.setOptionValue('mip_improving_solution_save', 'true')
         self.highspy_interface.setOptionValue('presolve', 'on')
-        self.highspy_interface.setOptionValue("output_flag", False)
-        self.highspy_interface.setOptionValue("log_to_console", False)
+        self.highspy_interface.setOptionValue("output_flag", True)
+        self.highspy_interface.setOptionValue("log_to_console", True)
+        self.highspy_interface.setOptionValue("parallel", "on")
         read_status = self.highspy_interface.readModel(filename)
         if read_status != highspy.HighsStatus.kOk:
             raise ValueError(f"Unable to read optimization model: {read_status}")

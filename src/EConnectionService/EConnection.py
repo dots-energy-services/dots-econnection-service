@@ -418,7 +418,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         if 'EVChargingStation' in asset_portfolio:
             ev_charging_station = asset_portfolio['EVChargingStation']['esdl_object']
-            ev_params = self.esdl_entity_parser.get_ev_parameters(ev_charging_station, self.simulator_configuration.start_time, self.simulator_configuration.simulation_duration_in_seconds, self.ems_time_step_seconds, simulation_time, time_step_number)
+            ev_params = self.esdl_entity_parser.get_ev_parameters(ev_charging_station, self.simulator_configuration.start_time, self.simulator_configuration.simulation_duration_in_seconds, self.ems_time_step_seconds, time_step_number)
             problem.create_ev_charging_station(ev_params)
 
         # Create energy balance constraints, grid tariff constraints and the objective function
@@ -610,6 +610,12 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             ret_val['dispatch_ev'] = p_ev_w
             ev = asset_portfolio['EVChargingStation']['esdl_object']
             soc_ev = problem.get_value_from_component_at_time_index('soc_ev', 1)
+            p_ev = problem.get_value_from_component_at_time_index('p_ev', 0)
+            p_ev_use = problem.get_value_from_component_at_time_index('p_ev_use', 0)
+            p_ev_sell = problem.get_value_from_component_at_time_index('p_ev_sell', 0)
+            LOGGER.info(f"p_ev: {p_ev}")
+            LOGGER.info(f"p_ev_use: {p_ev_use}")
+            LOGGER.info(f"p_ev_sell: {p_ev_sell}")
             self.esdl_entity_parser.set_soc_ev(ev, soc_ev)
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'EVChargingStation', p_ev_w)
             aggregated_active_power += p

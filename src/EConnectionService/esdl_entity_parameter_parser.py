@@ -153,7 +153,7 @@ class EsdlEntityParameterParser:
             )
         return self._heatpump_cache[key]
 
-    def get_ev_parameters(self, ev : esdl.EVChargingStation, simulation_start_time : datetime, simulation_duration_in_seconds : int, time_step_in_seconds : int, current_simulation_time : datetime, timestep_information : TimeStepInformation) -> EVParameters:
+    def get_ev_parameters(self, ev : esdl.EVChargingStation, simulation_start_time : datetime, simulation_duration_in_seconds : int, time_step_in_seconds : int, timestep_information : TimeStepInformation) -> EVParameters:
         key = ev.id
         ev_profile_port = next(port for port in ev.port if any(isinstance(connected_to.eContainer(), esdl.MobilityDemand) for connected_to in port.connectedTo))
         mobility_demand : esdl.MobilityDemand = next(obj.eContainer() for obj in ev_profile_port.connectedTo if isinstance(obj.eContainer(), esdl.MobilityDemand))
@@ -192,8 +192,11 @@ class EsdlEntityParameterParser:
         eps = 1.0e-3
         if timestep_information.current_time_step_number + 1 in ev_params.arrival_ptus:
             ev_params.current_soc_kwh = ev_params.arrival_ptus[timestep_information.current_time_step_number + 1]
+            dep_ptu = next(dep_ptu for arr_ptu, dep_ptu in zip(arrival_ptus, departure_ptus))
+            ev_params.min_soc_kwh = departure_ptus[dep_ptu]
         elif timestep_information.current_time_step_number - 1 in ev_params.departure_ptus or -eps < ev_params.current_soc_kwh < 0:
             ev_params.current_soc_kwh = 0
+            ev_params.min_soc_kwh = 0
         return ev_params
 
     def set_soc_ev(self, ev_charginstation : esdl.EVChargingStation, soc_ev : float):
