@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import math
 from pathlib import Path
 import random
 from typing import List
@@ -56,56 +57,38 @@ class EmsTest(unittest.TestCase):
     
         # Weather
         edemand_param["solar_irradiance"] = [152.77777777777777, 170.13888888888889, 187.5, 204.86111111111111, 222.22222222222223, 227.7777777777778, 233.3333333333333, 238.8888888888889, 244.44444444444449, 247.22222222222223, 250.0, 252.7777777777778, 255.5555555555556, 241.66666666666669, 227.7777777777778, 213.88888888888889, 200.0, 180.5555555555556, 161.11111111111111, 141.66666666666669, 122.22222222222224, 97.91666666666669, 73.61111111111111, 49.30555555555557, 25.0, 18.75, 12.5, 6.250000000000001, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        edemand_param["air_temperature"] = [279.25, 279.54999999999995, 279.85, 280.15, 280.45, 280.7, 280.95, 281.2,
-                                            281.45, 281.775, 282.1, 282.42499999999995, 282.75, 282.85, 282.95,
-                                            283.04999999999995, 283.15, 283.15, 283.15, 283.15, 283.15, 282.95, 282.75,
-                                            282.54999999999995, 282.35, 282.275, 282.2, 282.125, 282.04999999999995,
-                                            282.125, 282.2, 282.275, 282.35, 282.375, 282.4, 282.42499999999995, 282.45,
-                                            282.375, 282.29999999999995, 282.225, 282.15, 282.025, 281.9, 281.775,
-                                            281.65, 281.625, 281.6, 281.575]
-        edemand_param["soil_temperature"] = [281.3833333333333, 281.37916666666666, 281.375, 281.37083333333334,
-                                             281.3666666666666, 281.36249999999995, 281.3583333333333,
-                                             281.35416666666663, 281.35, 281.3458333333333, 281.34166666666664,
-                                             281.3375, 281.3333333333333, 281.32916666666665, 281.325,
-                                             281.3208333333333, 281.31666666666666, 281.3125, 281.30833333333334,
-                                             281.3041666666666, 281.29999999999995, 281.2958333333333,
-                                             281.29166666666663, 281.2875, 281.2833333333333, 281.27916666666664,
-                                             281.275, 281.2708333333333, 281.26666666666665, 281.2625,
-                                             281.2583333333333, 281.25416666666666, 281.25, 281.24583333333334,
-                                             281.2416666666666, 281.23749999999995, 281.2333333333333,
-                                             281.22916666666663, 281.225, 281.2208333333333, 281.21666666666664,
-                                             281.2125, 281.2083333333333, 281.20416666666665, 281.2, 281.1958333333333,
-                                             281.19166666666666, 281.1875]
-
+        edemand_param["air_temperature"] = [279.25, 279.54999999999995, 279.85, 280.15, 280.45, 280.7, 280.95, 281.2, 281.45, 281.775, 282.1, 282.42499999999995, 282.75, 282.85, 282.95, 283.04999999999995, 283.15, 283.15, 283.15, 283.15, 283.15, 282.95, 282.75, 282.54999999999995, 282.35, 282.275, 282.2, 282.125, 282.04999999999995, 282.125, 282.2, 282.275, 282.35, 282.375, 282.4, 282.42499999999995, 282.45, 282.375, 282.29999999999995, 282.225, 282.15, 282.025, 281.9, 281.775, 281.65, 281.625, 281.6, 281.575]
+        edemand_param["soil_temperature"] = [281.3833333333333, 281.37916666666666, 281.375, 281.37083333333334, 281.3666666666666, 281.36249999999995, 281.3583333333333, 281.35416666666663, 281.35, 281.3458333333333, 281.34166666666664, 281.3375, 281.3333333333333, 281.32916666666665, 281.325, 281.3208333333333, 281.31666666666666, 281.3125, 281.30833333333334, 281.3041666666666, 281.29999999999995, 281.2958333333333, 281.29166666666663, 281.2875, 281.2833333333333, 281.27916666666664, 281.275, 281.2708333333333, 281.26666666666665, 281.2625, 281.2583333333333, 281.25416666666666, 281.25, 281.24583333333334, 281.2416666666666, 281.23749999999995, 281.2333333333333, 281.22916666666663, 281.225, 281.2208333333333, 281.21666666666664, 281.2125, 281.2083333333333, 281.20416666666665, 281.2, 281.1958333333333, 281.19166666666666, 281.1875]
+        
         # PV
         edemand_param["potential_active_power"] = [977.7777777777778, 1088.888888888889, 1200.0, 1311.1111111111113, 1422.2222222222224, 1457.777777777778, 1493.333333333333, 1528.8888888888891, 1564.4444444444448, 1582.2222222222224, 1600.0, 1617.777777777778, 1635.5555555555559, 1546.666666666667, 1457.777777777778, 1368.888888888889, 1280.0, 1155.5555555555559, 1031.111111111111, 906.6666666666669, 782.2222222222224, 626.6666666666669, 471.11111111111114, 315.55555555555566, 160.0, 120.0, 80.0, 40.00000000000001, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     
         # heatpump
         edemand_param["dhw_temperature"] = 328.1499987884123
         edemand_param["buffer_temperature"] = 319.72477588114043
-        edemand_param["house_temperatures"] = [292.25009999999994, 288.3497627218783]
+        edemand_param["house_temperatures"] = [291.85009999999994, 288.3497627218783]
         return edemand_param
 
-# class TestEmsHelperFunctions(EmsTest):
+class TestEmsHelperFunctions(EmsTest):
     
-#     def test_given_tou_active_correct_weights_are_put_in_horizon(self):
-#         test_examples = [
-#             (datetime(2024, 3, 31, 22, 0, 0), 4 * [1.0] + 4 * [0.7] + 12 * [0.5] + 28 * [0.3] ),
-#             (datetime(2024, 1, 1, 0, 0, 0), 4 * [0.7] + 24 * [0.5] + 12 * [0.7] + 8 * [0.5] )
-#         ]
-#         for i in range(0, len(test_examples)):
-#             with self.subTest(i=i, params = test_examples[i]):
-#                 energy_system = self.load_esdl_file(str(Path(__file__).parent / 'test-peak-tariff.esdl'))
-#                 service = self.init_e_connection_service(energy_system)
-#                 from_date = test_examples[i][0]
-#                 weight_vals = service.get_variable_tariffs_in_quarterly_values(from_date, from_date + timedelta(seconds=900*48), 900)
-#                 expected_weight_vals = test_examples[i][1]
-#                 self.assertListEqual(weight_vals, expected_weight_vals)
+    def test_given_tou_active_correct_weights_are_put_in_horizon(self):
+        test_examples = [
+            (datetime(2024, 3, 31, 22, 0, 0), 4 * [1.0] + 4 * [0.7] + 12 * [0.5] + 28 * [0.3] ),
+            (datetime(2024, 1, 1, 0, 0, 0), 4 * [0.7] + 24 * [0.5] + 12 * [0.7] + 8 * [0.5] )
+        ]
+        for i in range(0, len(test_examples)):
+            with self.subTest(i=i, params = test_examples[i]):
+                energy_system = self.load_esdl_file(str(Path(__file__).parent / 'test-peak-tariff.esdl'))
+                service = self.init_e_connection_service(energy_system)
+                from_date = test_examples[i][0]
+                weight_vals = service.get_variable_tariffs_in_quarterly_values(from_date, from_date + timedelta(seconds=900*48), 900)
+                expected_weight_vals = test_examples[i][1]
+                self.assertListEqual(weight_vals, expected_weight_vals)
 
 class TestEmsOptimization(EmsTest):
 
     def test_different_tariff_instruments(self):
-        test_examples = [        
+        test_examples = [
             EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv",  "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-bandwidth.esdl')),
             EmsTestParam("1412f71f-a9d2-4c66-a834-385cf91c3767", ["aggregated_active_power", "aggregated_reactive_power", "dispatch_pv", "heat_power_to_buffer_hhp", "heat_power_to_house_hhp", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-bandwidth.esdl')),
             EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv",  "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-variable-peak-tariff.esdl')),
@@ -116,20 +99,20 @@ class TestEmsOptimization(EmsTest):
             EmsTestParam("5c19dcff-b004-4644-99b9-f42d15a34f3a", ["dispatch_pv",  "heat_power_to_tank_dhw", "heat_power_to_buffer", "heat_power_to_dhw", "heat_power_to_house", "aggregated_active_power", "aggregated_reactive_power", "predicted_aggregated_active_power", "predicted_aggregated_reactive_power"], str(Path(__file__).parent / 'test-no-tariff.esdl'), 2*1.0e-6)
         ]
 
-    #     for i in range(0, len(test_examples)):
-    #         with self.subTest(i=i, params = test_examples[i]):
+        for i in range(0, len(test_examples)):
+            with self.subTest(i=i, params = test_examples[i]):
 
-    #             test_param = test_examples[i]
-    #             energy_system = self.load_esdl_file(test_param.esdl_file)
-    #             service = self.init_e_connection_service(energy_system)
+                test_param = test_examples[i]
+                energy_system = self.load_esdl_file(test_param.esdl_file)
+                service = self.init_e_connection_service(energy_system)
 
-    #             edemand_param = self.get_default_set_params()
-    #             edemand_param["congestion_signal"] = test_param.congestion_signal_kw
+                edemand_param = self.get_default_set_params()
+                edemand_param["congestion_signal"] = test_param.congestion_signal_kw
 
-    #             # Execute
-    #             ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 15, 0), TimeStepInformation(1,96), test_param.esdl_id, energy_system)
-    #             for expected_outcome in test_param.expected_outcomes:
-    #                 self.assertIn(expected_outcome, ret_val.keys())
+                # Execute
+                ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 15, 0), TimeStepInformation(1,96), test_param.esdl_id, energy_system)
+                for expected_outcome in test_param.expected_outcomes:
+                    self.assertIn(expected_outcome, ret_val.keys())
 
     def test_given_congestion_signal_active_and_hybrid_heat_pump_is_present_and_gass_is_cheapest_then_gass_consumption_is_at_least_hot_water_demand(self):
         energy_system = self.load_esdl_file(str(Path(__file__).parent / 'test-hhp-gass-consumption.esdl'))
@@ -247,45 +230,59 @@ class TestEmsOptimization(EmsTest):
         self.assertNotEqual(cost_data_point.value, 0.0)
 
 
-    # def test_ev_model(self):
-    #     energy_system = self.load_esdl_file(str(Path(__file__).parent /'test-ev-model.esdl'))
-    #     service = self.init_e_connection_service(energy_system)
-
-    #     # Electricity demand
-    #     edemand_param = self.get_default_set_params()
-
-    #     esdl_id_to_test = "5c19dcff-b004-4644-99b9-f42d15a34f3a"
-    #     ev_charging_station = service.asset_portfolios[esdl_id_to_test]['EVChargingStation']['esdl_object']
-
-    #     time_step = TimeStepInformation(2,96)
-    #     ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 30, 0), time_step, esdl_id_to_test, energy_system)
-    #     ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, datetime(2024,1,14, 0, 15, 0), time_step)
-    #     self.assertNotEqual(ev_params.current_soc_kwh, 0)
-
-    #     time_step_2 = TimeStepInformation(3,96)
-    #     ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 45, 0), time_step_2, esdl_id_to_test, energy_system)
-    #     ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, datetime(2024,1,14, 0, 30, 0), time_step_2)
-    #     self.assertNotEqual(ev_params.current_soc_kwh, 0)
-
-    def test_ev_model_v2g(self):
-        energy_system = self.load_esdl_file(str(Path(__file__).parent /'test-ev-model-v2g.esdl'))
+    def test_ev_model(self):
+        # Arrange
+        energy_system = self.load_esdl_file(str(Path(__file__).parent /'test-ev-model.esdl'))
         service = self.init_e_connection_service(energy_system)
-    
+        edemand_param = self.get_default_set_params()
+        esdl_id_to_test = "5c19dcff-b004-4644-99b9-f42d15a34f3a"
+        last_simulated_time = START_DATE_TIME
+
+        # Execute
+        for i in range(1,4):
+
+            time_step = TimeStepInformation(i,96)
+            last_simulated_time = START_DATE_TIME + timedelta(seconds=i*900)
+            ret_val = service.calculate_dispatch(edemand_param, last_simulated_time, time_step, esdl_id_to_test, energy_system)
+
+        # Assert
+        soc_data_points : SimulaitonDataPoint = [dp for dp in service.influx_connector.data_points if dp.output_name == "soc_ev"]
+        prev_value = soc_data_points[0]
+        for dp in soc_data_points[1:]:
+            self.assertGreaterEqual(dp.value, prev_value.value )
+            self.assertLess(dp.value - prev_value.value, 11*0.25)
+            prev_value = dp
+        self.assertGreaterEqual(soc_data_points[-1].value, 60)
+
+    def test_ev_model_v2g_force_charge_and_discharge(self):
+        energy_system = self.load_esdl_file(str(Path(__file__).parent /'test-ev-model-v2g-force_charge.esdl'))
+        service = self.init_e_connection_service(energy_system)
+
         # Electricity demand
         edemand_param = self.get_default_set_params()
+        edemand_param["potential_active_power"] = [0.0 for _ in range(48)]
+        edemand_param["active_power"] = [0.0 for _ in range(48)]
+        edemand_param["reactive_power"] = [0.0 for _ in range(48)]
 
+        max_to_charge = 75 - (0.8 * 75 - 4.58)
+        n_time_steps_possible_charge = int(math.floor(max_to_charge / (0.25*11)))
         esdl_id_to_test = "5c19dcff-b004-4644-99b9-f42d15a34f3a"
+        
         ev_charging_station = service.asset_portfolios[esdl_id_to_test]['EVChargingStation']['esdl_object']
-    
-        time_step = TimeStepInformation(2,96)
-        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 30, 0), time_step, esdl_id_to_test, energy_system)
-        ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, datetime(2024,1,14, 0, 15, 0), time_step)
-        self.assertNotEqual(ev_params.current_soc_kwh, 0)
-
-        time_step_2 = TimeStepInformation(3,96)
-        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 45, 0), time_step_2, esdl_id_to_test, energy_system)
-        ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, datetime(2024,1,14, 0, 30, 0), time_step_2)
-        self.assertNotEqual(ev_params.current_soc_kwh, 0)
+        initial_soc = 0.8*75 - 4.58
+        prev_soc = initial_soc
+        start_date_time = datetime(2024,1,14, 0, 15, 0)
+        for i in range(1, n_time_steps_possible_charge + 1):
+            time_steps_to_charge_remaining = n_time_steps_possible_charge - i
+            edemand_param['day_ahead_prices'] = [1.23 for _ in range(time_steps_to_charge_remaining)] + [800.0 for _ in range(48 - time_steps_to_charge_remaining)]
+            date_time = start_date_time + timedelta(seconds=i*900)
+            time_step = TimeStepInformation(i,96)
+            # TODO: fix testcase logic seems to work
+            ret_val = service.calculate_dispatch(edemand_param, date_time, time_step, esdl_id_to_test, energy_system)
+            time_step_2 = TimeStepInformation(i + 1,96)
+            ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, time_step_2)
+            self.assertGreater(ev_params.current_soc_kwh, prev_soc)
+            prev_soc = ev_params.current_soc_kwh
 
     def test_ev_arrives_soc_is_zero(self):
         pass
