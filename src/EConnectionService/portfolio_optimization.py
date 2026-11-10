@@ -38,9 +38,10 @@ class PortfolioOptimizationProblem:
         # change arrival/departure ptus based on current simulated time-step
         # e.g. we work in relative ptus from the current simulated ptu
         time_step_nr = pyo.value(self.model.time_step_nr)
-        arrival_ptus = [ptu - time_step_nr for ptu in ev_params.arrival_ptus]  # first simulated time step is 1
-        departure_ptus = [ptu - time_step_nr for ptu in ev_params.departure_ptus.keys()]
+        arrival_ptus = [ptu - time_step_nr for ptu in sorted(ev_params.arrival_ptus.keys())]  # first simulated time step is 1
+        departure_ptus = [ptu - time_step_nr for ptu in sorted(ev_params.departure_ptus.keys())]
         departure_ptus_dict = {ptu - time_step_nr: val for ptu, val in ev_params.departure_ptus.items()}
+        arrival_ptus_dict = {ptu - time_step_nr: val for ptu, val in ev_params.arrival_ptus.items()}
 
         LOGGER.info(f"arrival ptus: {ev_params.arrival_ptus}")
         LOGGER.info(f"departure ptus: {ev_params.departure_ptus}")
@@ -48,36 +49,29 @@ class PortfolioOptimizationProblem:
         LOGGER.info(f"max power kw: {ev_params.max_power_kw}")
         LOGGER.info(f"max soc kwh: {ev_params.max_soc_kwh}")
         LOGGER.info(f"efficiency: {ev_params.efficiency}")
-        LOGGER.info(f"arrival soc: {ev_params.initial_soc_kwh}")
-        LOGGER.info(f"departure soc min: {ev_params.dep_soc_min_kwh}")
         LOGGER.info(f"min power kw: {ev_params.min_power_kw}")
         LOGGER.info(f"min soc kwh: {ev_params.min_soc_kwh}")
 
         # Parameters
         # Numbers
-        min_ch_rate_kw = ev_params.min_power_kw
-        self.model.init_soc_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.initial_soc_kwh)
+        self.model.init_soc_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.current_soc_kwh)
 
         self.model.ch_eff_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.efficiency)
         self.model.max_ch_rate_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.max_power_kw)
-        self.model.min_ch_rate_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=min_ch_rate_kw)
+        self.model.min_ch_rate_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.min_power_kw)
+        self.model.capacity_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.max_soc_kwh)
         # self.model.min_soc_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.min_soc_kwh)
 
         # Arrays
         # Create availability list
         number_of_ptus = len(self.model.time_index_p) + 1
         availability_ev = number_of_ptus * [0]
-        max_soc_ev = [0 for i in self.model.time_index_soc]
         for arrival_ptu, departure_ptu in zip(arrival_ptus, departure_ptus):
-
             for ptu in range(max(0, arrival_ptu), max(0, min(departure_ptu + 1, number_of_ptus)) ):
                 availability_ev[ptu] = 1
-                max_soc_ev[ptu] = ev_params.max_soc_kwh
 
         self.model.availability_ev = pyo.Param(self.model.time_index_p, within=pyo.Binary,
                                                initialize=self.it2dict(availability_ev[:-1]))
-
-        self.model.capacity_ev = pyo.Param(self.model.time_index_soc, within=pyo.NonNegativeReals, initialize=self.it2dict(max_soc_ev))
 
         # Variables
         self.model.soc_ev = pyo.Var(self.model.time_index_soc, within=pyo.NonNegativeReals,
@@ -87,15 +81,20 @@ class PortfolioOptimizationProblem:
         self.model.p_ev_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
 
         self.model.z_ch_ev = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
+        self.model.z_dis_ch_ev = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
 
+        self.model.con_exclusive_dis_and_ch_ev = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            m.z_ch_ev[t] + m.z_dis_ch_ev[t] <= 1
+        )
         self.model.con_ev_dch_limit_upper = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-             1 / m.ch_eff_ev * (m.p_ev_use[t] + m.p_ev_sell[t]) <= (1 - m.z_ch_ev[t]) * m.max_ch_rate_ev
+             1 / m.ch_eff_ev * (m.p_ev_use[t] + m.p_ev_sell[t]) <= m.z_dis_ch_ev[t] * m.max_ch_rate_ev
         )
 
         self.model.con_ev_dch_limit_lower = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-             1 / m.ch_eff_ev * (m.p_ev_use[t] + m.p_ev_sell[t]) >= (1 - m.z_ch_ev[t]) * m.min_ch_rate_ev
+             1 / m.ch_eff_ev * (m.p_ev_use[t] + m.p_ev_sell[t]) >= m.z_dis_ch_ev[t] * m.min_ch_rate_ev
         )
 
         self.model.con_ev_ch_limit_upper = pyo.Constraint(
@@ -110,28 +109,23 @@ class PortfolioOptimizationProblem:
 
         self.model.con_soc_ev_0_low = pyo.Constraint(
             self.model.time_index_p1, rule=lambda m, t:
-            m.soc_ev[t] == ev_params.current_soc_kwh * m.availability_ev[t]
-        )
-
-        self.model.con_soc_ev_lower_bound = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            m.soc_ev[t] >= 0
+            m.soc_ev[t] == ev_params.current_soc_kwh
         )
 
         # Remove this one at it passes why?
         self.model.con_discharge_v2g_constraint_f = pyo.Constraint(
             self.model.time_index_p, rule=lambda model, t:
-            model.soc_ev[t+1] >= ev_params.min_soc_kwh * (1 - model.z_ch_ev[t]) * model.availability_ev[t]
+            model.soc_ev[t+1] >= ev_params.min_soc_kwh * model.z_dis_ch_ev[t] * model.availability_ev[t]
         )
 
         self.model.con_soc_ev_max = pyo.Constraint(
             self.model.time_index_soc, rule=lambda m, t:
-            m.soc_ev[t] <= m.capacity_ev[t]
+            m.soc_ev[t] <= m.capacity_ev
         )
 
         def arrival_constraint_f(model, t):
             if t in arrival_ptus and t > 0: # set ev soc to 0 when it arrives the time step before such that it can charge in its arrival ptu
-                arrival_soc = ev_params.initial_soc_kwh
+                arrival_soc = arrival_ptus_dict[t]
                 return model.soc_ev[t-1] == arrival_soc
             else:
                 return pyo.Constraint.Skip
@@ -140,7 +134,7 @@ class PortfolioOptimizationProblem:
 
         def departure_constraint_f_low(model, t):
             if t in departure_ptus:
-                return model.soc_ev[t] >= ev_params.dep_soc_min_kwh
+                return model.soc_ev[t] >= departure_ptus_dict[t]
             else:
                 return pyo.Constraint.Skip
 
@@ -149,8 +143,8 @@ class PortfolioOptimizationProblem:
         def soc_update_charge(model, t):
             if (any(arr_ptu <= t <= dep_ptu for arr_ptu, dep_ptu in
                     zip(arrival_ptus, departure_ptus))) \
-                    and t < model.time_index_soc.last():
-                return model.soc_ev[t+1] == model.soc_ev[t] + (model.ch_eff_ev * model.p_ev[t] - 1 / model.ch_eff_ev * (model.p_ev_use[t] + model.p_ev_sell[t]))
+                    and t < model.time_index_soc.last() and t > 0:
+                return model.soc_ev[t] == model.soc_ev[t-1] + (model.ch_eff_ev * model.p_ev[t] - 1 / model.ch_eff_ev * (model.p_ev_use[t] + model.p_ev_sell[t])) * model.dt
             else:
                 return pyo.Constraint.Skip
 
@@ -660,7 +654,7 @@ class PortfolioOptimizationProblem:
             if 'HybridHeatPump' in asset_portfolio:
                 e_buy += m.p_hhp[t] * m.dt
             if 'EVChargingStation' in asset_portfolio:
-                e_buy += m.p_ev_use[t] * m.dt
+                e_buy += (m.p_ev[t] - m.p_ev_use[t]) * m.dt
 
             return m.e_buy[t] == e_buy
 
@@ -811,8 +805,8 @@ class PortfolioOptimizationProblem:
         self.highspy_interface.clear()
         self.highspy_interface.setOptionValue('mip_rel_gap', mip_gap)
         self.highspy_interface.setOptionValue('presolve', 'on')
-        self.highspy_interface.setOptionValue("output_flag", True)
-        self.highspy_interface.setOptionValue("log_to_console", True)
+        self.highspy_interface.setOptionValue("output_flag", False)
+        self.highspy_interface.setOptionValue("log_to_console", False)
         read_status = self.highspy_interface.readModel(filename)
         if read_status != highspy.HighsStatus.kOk:
             raise ValueError(f"Unable to read optimization model: {read_status}")
