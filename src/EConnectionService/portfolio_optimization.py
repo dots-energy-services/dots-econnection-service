@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 import esdl
 import pyomo.environ as pyo
 import numpy as np
@@ -20,6 +21,7 @@ class PortfolioOptimizationProblem:
         self.has_ev = False
         self.esdl_entity_parser = esdl_entity_parser
         self.highspy_interface = highspy.Highs()
+        self.connection_capacity = 17.0  # TODO: remove magic number
 
     def create_time(self, time_params: dict):
         self.model.time_index_p = pyo.RangeSet(0, time_params['n_steps'] - 1)
@@ -61,7 +63,6 @@ class PortfolioOptimizationProblem:
         self.model.max_ch_rate_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.max_power_kw)
         self.model.min_ch_rate_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.min_power_kw)
         self.model.capacity_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.max_soc_kwh)
-        # self.model.min_soc_ev = pyo.Param(within=pyo.NonNegativeReals, initialize=ev_params.min_soc_kwh)
 
         # Arrays
         # Create availability list
@@ -628,51 +629,54 @@ class PortfolioOptimizationProblem:
         self.has_hybrid_heat_pump = True
 
     def create_energy_balance(self, asset_portfolio: dict):
+        self.model.e_prosumed = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
         self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
+        # self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
 
-        capacity = 17.0  # TODO: remove magic number
+        self.model.con_energy_e_prosumed_up = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            m.e_prosumed[t] <= self.connection_capacity * m.dt
+        )
+        self.model.con_energy_e_prosumed_low = pyo.Constraint(
+            self.model.time_index_p, rule=lambda m, t:
+            -self.connection_capacity * m.dt <= m.e_prosumed[t]
+        )
         self.model.con_energy_buy_ub = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.e_buy[t] <= m.z_buy[t] * capacity * m.dt
+            m.e_buy[t] <= self.connection_capacity * m.dt
         )
 
         self.model.con_energy_sell_ub = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.e_sell[t] <= (1 - m.z_buy[t]) * capacity * m.dt
+            m.e_sell[t] <= self.connection_capacity * m.dt
         )
 
-        def con_energy_buy_f(m, t):
-            e_buy = 0.0
+        def con_energy_e_prosumed_f(m, t):
+            e_prosumed = 0.0
             if 'ElectricityDemand' in asset_portfolio:
-                e_buy += m.p_edemand[t] * m.dt
+                e_prosumed += m.p_edemand[t] * m.dt
             if 'PVInstallation' in asset_portfolio:
-                e_buy -= m.p_pv_use[t] * m.dt
-            if 'Battery' in asset_portfolio:
-                e_buy += (m.p_ch[t] - m.p_bat_use[t]) * m.dt
+                e_prosumed -= m.p_pv_use[t] * m.dt
+                e_prosumed -= m.p_pv_sell[t] * m.dt
             if 'HeatPump' in asset_portfolio:
-                e_buy += m.p_hp[t] * m.dt
+                e_prosumed += m.p_hp[t] * m.dt
             if 'HybridHeatPump' in asset_portfolio:
-                e_buy += m.p_hhp[t] * m.dt
-            if 'EVChargingStation' in asset_portfolio:
-                e_buy += (m.p_ev[t] - m.p_ev_use[t]) * m.dt
-
-            return m.e_buy[t] == e_buy
-
-        self.model.con_energy_buy = pyo.Constraint(self.model.time_index_p, rule=con_energy_buy_f)
-
-        def con_energy_sell_f(m, t):
-            e_sell = 0.0
-            if 'PVInstallation' in asset_portfolio:
-                e_sell += m.p_pv_sell[t] * m.dt
+                e_prosumed += m.p_hhp[t] * m.dt
             if 'Battery' in asset_portfolio:
-                e_sell += m.p_bat_sell[t] * m.dt
+                e_prosumed -= m.p_bat_sell[t] * m.dt
+                e_prosumed += m.p_ch[t] * m.dt
+                e_prosumed -= m.p_bat_use[t] * m.dt
             if 'EVChargingStation' in asset_portfolio:
-                e_sell += m.p_ev_sell[t] * m.dt
-            return m.e_sell[t] == e_sell
+                e_prosumed -= m.p_ev_sell[t] * m.dt
+                e_prosumed += m.p_ev[t] * m.dt
+                e_prosumed -= m.p_ev_use[t] * m.dt
 
-        self.model.con_energy_sell = pyo.Constraint(self.model.time_index_p, rule=con_energy_sell_f)
+            return m.e_prosumed[t] == e_prosumed
+
+        self.model.con_energy_prosumed = pyo.Constraint(self.model.time_index_p, rule=con_energy_e_prosumed_f)
+
+        self.model.con_energy_balance = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: -m.e_sell[t] + m.e_buy[t] == m.e_prosumed[t])
 
     def get_first_value_from_component(self, name: str):
         column = self.highspy_interface.getColByName(f"{name}(0)")
@@ -811,7 +815,7 @@ class PortfolioOptimizationProblem:
         self.model.write(filename, io_options={'symbolic_solver_labels': True})
         self.highspy_interface.clear()
         self.highspy_interface.setOptionValue('mip_rel_gap', mip_gap)
-        self.highspy_interface.setOptionValue('mip_improving_solution_save', 'true')
+        self.highspy_interface.setOptionValue('mip_improving_solution_save', True)
         self.highspy_interface.setOptionValue('presolve', 'on')
         self.highspy_interface.setOptionValue("output_flag", False)
         self.highspy_interface.setOptionValue("log_to_console", False)
@@ -822,7 +826,11 @@ class PortfolioOptimizationProblem:
 
         LOGGER.info(f"Loaded optimization model with {self.highspy_interface.getNumRow()} constraints")
 
+        self.highspy_interface.readModel(filename)
+        start = time.time()
         self.highspy_interface.run()
+        end = time.time()
+        LOGGER.info(f"Time to solve: {end - start} seconds")
         model_status = self.highspy_interface.getModelStatus()
 
         if not (self.highspy_interface.modelStatusToString(model_status) == "Optimal" or self.highspy_interface.modelStatusToString(model_status) == "Solve error"):
@@ -858,7 +866,6 @@ class PortfolioOptimizationProblem:
         self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_power_kw)
         self.model.static_bw_costs = pyo.Var(time_index, within=pyo.NonNegativeReals, initialize=0)
 
-        # Constraints
         self.model.con_bw_low = pyo.Constraint(
             time_index, rule=lambda m, t:
             # eur/kWh x kWh
