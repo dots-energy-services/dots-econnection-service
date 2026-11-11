@@ -1410,7 +1410,7 @@
           <port xsi:type="esdl:OutPort" connectedTo="88cfd7b8-2201-40d5-b6fb-f089d9791362" id="c2f19962-8ce0-4582-811e-df578c38f9ef"/>
           <geometry xsi:type="esdl:Point" lon="236.0" CRS="Simple" lat="415.0"/>
         </asset>
-        <asset xsi:type="esdl:EVChargingStation" powerFactor="1.0" description="{&quot;arrival_ptus&quot;: [174], &quot;departure_ptus&quot;: [221], &quot;arrival_socs&quot;: [152611200.0], &quot;departure_socs&quot;: [244800000.0], &quot;max_soc&quot;: 244800000.0, &quot;efficiency&quot;: 1.0}" name="chargingstation_Home1" power="11000.0" id="0ff9e0be-d450-4bd3-b2a8-9c5b729c31e0">
+        <asset xsi:type="esdl:EVChargingStation" powerFactor="1.0" description="{&quot;min_ch_rate_kw&quot;: 4.2, &quot;max_soc_kwh&quot;: 75.0, &quot;min_soc_frac&quot;: 0.3, &quot;efficiency&quot;: 0.95}" name="chargingstation_Home1" power="11000.0" id="0ff9e0be-d450-4bd3-b2a8-9c5b729c31e0">
           <port xsi:type="esdl:InPort" connectedTo="85715f41-aef6-4d76-a3c5-64b11f67589a" id="42169dc0-af96-42e5-8097-fedd85fca0c2"/>
           <port xsi:type="esdl:InPort" connectedTo="cd3bbdc7-156b-48a0-a4c6-7093fb1a322e" id="90437946-61b9-474f-b1d9-5d6197b12582"/>
           <port xsi:type="esdl:InPort" connectedTo="30adeaac-2f56-4699-aebc-a4402a2cf594" id="523150fa-ed94-4dfe-acf6-0a83422dcd0d"/>

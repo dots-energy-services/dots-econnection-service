@@ -17,6 +17,7 @@ class PortfolioOptimizationProblem:
         self.has_heat_pump = False
         self.has_hybrid_heat_pump = False
         self.has_grid_tariff = False
+        self.has_ev = False
         self.esdl_entity_parser = esdl_entity_parser
         self.highspy_interface = highspy.Highs()
 
@@ -112,7 +113,6 @@ class PortfolioOptimizationProblem:
             m.soc_ev[t] == ev_params.current_soc_kwh
         )
 
-        # Remove this one at it passes why?
         self.model.con_discharge_v2g_constraint_f = pyo.Constraint(
             self.model.time_index_p, rule=lambda model, t:
             model.soc_ev[t+1] >= ev_params.min_soc_kwh * model.z_dis_ch_ev[t] * model.availability_ev[t]
@@ -150,6 +150,7 @@ class PortfolioOptimizationProblem:
                 return pyo.Constraint.Skip
 
         self.model.con_soc_ev_update_ch = pyo.Constraint(self.model.time_index_soc, rule=soc_update_charge)
+        self.has_ev = True
 
     def create_pv(self, potential_active_power: list):
         # Parameters
@@ -759,9 +760,14 @@ class PortfolioOptimizationProblem:
                 sell_prices_ev = sell_prices
 
         # Convert e_buy from J to kWh to match the price unit Eur/kWh
-        self.model.sell_rev_def = pyo.Constraint(
-                        self.model.time_index_p, rule=lambda m, t:
-                        m.sell_rev[t] == sell_prices[t] * m.e_sell[t] + (sell_prices_ev[t] * m.p_ev_sell[t]))
+        if self.has_ev:
+            self.model.sell_rev_def = pyo.Constraint(
+                self.model.time_index_p, rule=lambda m, t:
+                m.sell_rev[t] == sell_prices[t] * m.e_sell[t] + (sell_prices_ev[t] * m.p_ev_sell[t]))
+        else:
+            self.model.sell_rev_def = pyo.Constraint(
+                self.model.time_index_p, rule=lambda m, t:
+                m.sell_rev[t] == sell_prices[t] * m.e_sell[t])
         self.model.total_sell_rev_def = pyo.Constraint(
             rule=lambda m: m.total_sell_rev == sum(m.sell_rev[t] for t in m.time_index_p))
 
@@ -807,8 +813,8 @@ class PortfolioOptimizationProblem:
         self.highspy_interface.setOptionValue('mip_rel_gap', mip_gap)
         self.highspy_interface.setOptionValue('mip_improving_solution_save', 'true')
         self.highspy_interface.setOptionValue('presolve', 'on')
-        self.highspy_interface.setOptionValue("output_flag", True)
-        self.highspy_interface.setOptionValue("log_to_console", True)
+        self.highspy_interface.setOptionValue("output_flag", False)
+        self.highspy_interface.setOptionValue("log_to_console", False)
         self.highspy_interface.setOptionValue("parallel", "on")
         read_status = self.highspy_interface.readModel(filename)
         if read_status != highspy.HighsStatus.kOk:

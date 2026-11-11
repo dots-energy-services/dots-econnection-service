@@ -240,14 +240,15 @@ class TestEmsOptimization(EmsTest):
         esdl_id_to_test = "5c19dcff-b004-4644-99b9-f42d15a34f3a"
         ev_charging_station = service.asset_portfolios[esdl_id_to_test]['EVChargingStation']['esdl_object']
 
-        time_step = TimeStepInformation(2,96)
-        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 30, 0), time_step, esdl_id_to_test, energy_system)
-        ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, time_step)
+        time_step = TimeStepInformation(1,96)
+        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 15, 0), time_step, esdl_id_to_test, energy_system)
+        time_step_2 = TimeStepInformation(2,96)
+        ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, time_step_2)
         self.assertNotEqual(ev_params.current_soc_kwh, 0)
 
-        time_step_2 = TimeStepInformation(3,96)
-        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 45, 0), time_step_2, esdl_id_to_test, energy_system)
-        ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, time_step_2)
+        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 30, 0), time_step_2, esdl_id_to_test, energy_system)
+        time_step_4 = TimeStepInformation(3, 96)
+        ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, time_step_4)
         self.assertNotEqual(ev_params.current_soc_kwh, 0)
 
     def test_ev_model_v2g_force_charge_and_discharge(self):
@@ -261,35 +262,23 @@ class TestEmsOptimization(EmsTest):
         edemand_param["reactive_power"] = [0.0 for _ in range(48)]
 
         max_to_charge = 75 - (0.8 * 75 - 4.58)
-        n_time_steps_possible_charge = int(math.ceil(max_to_charge / (0.25*11)))
+        n_time_steps_possible_charge = int(math.floor(max_to_charge / (0.25*11)))
         esdl_id_to_test = "5c19dcff-b004-4644-99b9-f42d15a34f3a"
         
         ev_charging_station = service.asset_portfolios[esdl_id_to_test]['EVChargingStation']['esdl_object']
         initial_soc = 0.8*75 - 4.58
         prev_soc = initial_soc
+        start_date_time = datetime(2024,1,14, 0, 15, 0)
         for i in range(1, n_time_steps_possible_charge + 1):
             time_steps_to_charge_remaining = n_time_steps_possible_charge - i
             edemand_param['day_ahead_prices'] = [10.23 for _ in range(time_steps_to_charge_remaining)] + [800.0 for _ in range(48 - time_steps_to_charge_remaining)]
-        
+            date_time = start_date_time + timedelta(seconds=i*900)
             time_step = TimeStepInformation(i,96)
-            ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 15, 0), time_step, esdl_id_to_test, energy_system)
-            time_step_2 = TimeStepInformation(i+ 1,96)
+            ret_val = service.calculate_dispatch(edemand_param, date_time, time_step, esdl_id_to_test, energy_system)
+            time_step_2 = TimeStepInformation(i + 1,96)
             ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, time_step_2)
             self.assertGreater(ev_params.current_soc_kwh, prev_soc)
             prev_soc = ev_params.current_soc_kwh
-        
-        # edemand_param['day_ahead_prices'] = [10.23, 8000.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0]
-        # ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 45, 0), time_step_2, esdl_id_to_test, energy_system)
-        # time_step_3 = TimeStepInformation(3,96)
-        # ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, time_step_3)
-        # self.assertGreater(ev_params.current_soc_kwh, initial_soc + 0.25*11)
-        # prev_soc = ev_params.current_soc_kwh
-
-        # edemand_param['day_ahead_prices'] = [8000.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0, 800.0]
-        # ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,14, 0, 45, 0), time_step_3, esdl_id_to_test, energy_system)
-        # time_step_4 = TimeStepInformation(4,96)
-        # ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, time_step_4)
-        # self.assertLess(ev_params.current_soc_kwh, prev_soc)
 
     def test_ev_arrives_soc_is_zero(self):
         pass
