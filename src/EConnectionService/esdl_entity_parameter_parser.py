@@ -168,8 +168,8 @@ class EsdlEntityParameterParser:
             ev_d = json.loads(ev.description)
             ptu = 1
             while current_datetime <= end_date_time:
-                profile_elem_arr = next((elem for elem in datetime_profile.element if current_datetime <= elem.from_ < current_datetime + timedelta(seconds=time_step_in_seconds)), None)
-                profile_elem_dep = next((elem for elem in datetime_profile.element if current_datetime <= elem.to < current_datetime + timedelta(seconds=time_step_in_seconds)), None)
+                profile_elem_arr = next((elem for elem in datetime_profile.element if current_datetime <= elem.from_ < current_datetime + timedelta(seconds=time_step_in_seconds) and elem.from_ >= simulation_start_time), None)
+                profile_elem_dep = next((elem for elem in datetime_profile.element if current_datetime <= elem.to < current_datetime + timedelta(seconds=time_step_in_seconds) and elem.to <= end_date_time), None)
                 if profile_elem_arr:
                     arrival_ptus[ptu] = 0.8 * ev_d['max_soc_kwh'] - profile_elem_arr.value
                 if profile_elem_dep is not None and len(departure_ptus) == len(arrival_ptus) - 1:

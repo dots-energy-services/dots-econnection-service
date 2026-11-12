@@ -1,4 +1,3 @@
-from pathlib import Path
 import time
 import esdl
 import pyomo.environ as pyo
@@ -6,22 +5,24 @@ import numpy as np
 from dots_infrastructure.Logger import LOGGER
 from pyomo.core.base.var import ScalarVar
 from pyomo.core.base.param import IndexedParam, ScalarParam
-import os
-import highspy
+from typing import Optional
 
 from EConnectionService.esdl_entity_parameter_parser import EVParameters, EsdlEntityParameterParser
 
 
 class PortfolioOptimizationProblem:
-    def __init__(self, esdl_entity_parser : EsdlEntityParameterParser, highspy_interface : highspy.Highs):
+    def __init__(self, esdl_entity_parser: EsdlEntityParameterParser, n_steps: int):
+        self.esdl_entity_parser = esdl_entity_parser
+        self.n_steps = n_steps
+        self.prev_solution: Optional[dict[str, dict[int, float]]] = None
+
+    def init_problem(self):
         self.model = pyo.ConcreteModel()
+        self.connection_capacity = 17.0  # TODO: remove magic number
+        self.has_grid_tariff = False
         self.has_heat_pump = False
         self.has_hybrid_heat_pump = False
-        self.has_grid_tariff = False
         self.has_ev = False
-        self.esdl_entity_parser = esdl_entity_parser
-        self.highspy_interface = highspy.Highs()
-        self.connection_capacity = 17.0  # TODO: remove magic number
 
     def create_time(self, time_params: dict):
         self.model.time_index_p = pyo.RangeSet(0, time_params['n_steps'] - 1)
@@ -29,13 +30,26 @@ class PortfolioOptimizationProblem:
         self.model.time_index_soc = pyo.RangeSet(0, time_params['n_steps'])
         self.model.dt = pyo.Param(initialize=time_params['dt'] / 3600)
         self.model.time_step_nr = pyo.Param(initialize=time_params['time_step_nr'])
-        self.solution : highspy.HighsSolution = None
 
     def create_electricity_demand(self, active_power: list):
         # Parameters
         LOGGER.info("Creating electricity demand parameters")
         p_edemand_dict = self.it2dict(active_power)
         self.model.p_edemand = pyo.Param(self.model.time_index_p, within=pyo.Reals, initialize=p_edemand_dict)
+
+    def get_previous_values_from_solution(self, variable_index_mapping : list[tuple[str, int]]) -> dict[str, list[float]]:
+        var_dict: dict[str, dict[int, float]] = {name: {} for name, _ in variable_index_mapping}
+        for name, index in variable_index_mapping:
+            for i in range(1, index):
+                if self.prev_solution is not None:
+                    value = self.get_value_from_component_from_prev_solution_at_time_index(name, i)
+                    var_dict[name][i-1] = round(value, 1)
+                else:
+                    var_dict[name][i-1] = 0.0
+        for values in var_dict.values():
+            values[len(values)] = 0.0
+        return var_dict
+
 
     def create_ev_charging_station(self, ev_params: EVParameters):
         # change arrival/departure ptus based on current simulated time-step
@@ -45,6 +59,17 @@ class PortfolioOptimizationProblem:
         departure_ptus = [ptu - time_step_nr for ptu in sorted(ev_params.departure_ptus.keys())]
         departure_ptus_dict = {ptu - time_step_nr: val for ptu, val in ev_params.departure_ptus.items()}
         arrival_ptus_dict = {ptu - time_step_nr: val for ptu, val in ev_params.arrival_ptus.items()}
+        prev_var_names = [
+            ('p_ev', len(self.model.time_index_p)), 
+            ('soc_ev', len(self.model.time_index_soc)),
+            ('p_ev_use', len(self.model.time_index_p)),
+            ('p_ev_sell', len(self.model.time_index_p)),
+            ('z_ch_ev', len(self.model.time_index_p)),
+            ('z_dis_ch_ev', len(self.model.time_index_p)),
+
+        ]
+        previous_values = self.get_previous_values_from_solution(prev_var_names)
+
 
         LOGGER.info(f"arrival ptus: {ev_params.arrival_ptus}")
         LOGGER.info(f"departure ptus: {ev_params.departure_ptus}")
@@ -77,13 +102,13 @@ class PortfolioOptimizationProblem:
 
         # Variables
         self.model.soc_ev = pyo.Var(self.model.time_index_soc, within=pyo.NonNegativeReals,
-                                    initialize=self.model.init_soc_ev)
-        self.model.p_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        self.model.p_ev_use = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        self.model.p_ev_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+                                    initialize=previous_values['soc_ev'])
+        self.model.p_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=previous_values['p_ev'])
+        self.model.p_ev_use = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=previous_values['p_ev_use'])
+        self.model.p_ev_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=previous_values['p_ev_sell'])
 
-        self.model.z_ch_ev = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
-        self.model.z_dis_ch_ev = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
+        self.model.z_ch_ev = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=previous_values['z_ch_ev'])
+        self.model.z_dis_ch_ev = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=previous_values['z_dis_ch_ev'])
 
         self.model.con_exclusive_dis_and_ch_ev = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
@@ -101,12 +126,12 @@ class PortfolioOptimizationProblem:
 
         self.model.con_ev_ch_limit_upper = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.ch_eff_ev * m.p_ev[t] <= m.z_ch_ev[t] * m.max_ch_rate_ev
+            m.p_ev[t] <= m.z_ch_ev[t] * m.max_ch_rate_ev
         )
 
         self.model.con_ev_ch_limit_lower = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.ch_eff_ev * m.p_ev[t] >= m.z_ch_ev[t] * m.min_ch_rate_ev
+            m.p_ev[t] >= m.z_ch_ev[t] * m.min_ch_rate_ev
         )
 
         self.model.con_soc_ev_0_low = pyo.Constraint(
@@ -679,12 +704,17 @@ class PortfolioOptimizationProblem:
         self.model.con_energy_balance = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: -m.e_sell[t] + m.e_buy[t] == m.e_prosumed[t])
 
     def get_first_value_from_component(self, name: str):
-        column = self.highspy_interface.getColByName(f"{name}(0)")
-        return self.solution.col_value[column[1]]
+        component = self.model.find_component(name)
+        return float(pyo.value(component[0]))
 
     def get_value_from_component_at_time_index(self, name : str, index : int):
-        column = self.highspy_interface.getColByName(f"{name}({index})")
-        return self.solution.col_value[column[1]]
+        component = self.model.find_component(name)
+        return float(pyo.value(component[index]))
+
+    def get_value_from_component_from_prev_solution_at_time_index(self, name : str, index : int):
+        if self.prev_solution is None:
+            raise RuntimeError("No previous solution is available")
+        return self.prev_solution[name][index]
     
     def get_model_parameter_value(self, name: str, at_time_index = 0):
         component = self.model.find_component(name)
@@ -706,8 +736,8 @@ class PortfolioOptimizationProblem:
             raise TypeError(f'Component {name} should be IndexedVar or IndexedParam')
 
     def get_value_from_component(self, name: str):
-        column = self.highspy_interface.getColByName(f"{name}")
-        return self.solution.col_value[column[1]]
+        component = self.model.find_component(name)
+        return float(pyo.value(component))
 
     def create_objective_function(self, is_grid_tariff: bool):
         def total_costs(m):
@@ -810,36 +840,40 @@ class PortfolioOptimizationProblem:
 
 
     def solve(self, mip_gap):
-        filename_path = Path(__file__).parent / "model.mps"
-        filename = str(filename_path)
-        self.model.write(filename, io_options={'symbolic_solver_labels': True})
-        self.highspy_interface.clear()
-        self.highspy_interface.setOptionValue('mip_rel_gap', mip_gap)
-        self.highspy_interface.setOptionValue('mip_improving_solution_save', True)
-        self.highspy_interface.setOptionValue('presolve', 'on')
-        self.highspy_interface.setOptionValue("output_flag", False)
-        self.highspy_interface.setOptionValue("log_to_console", False)
-        self.highspy_interface.setOptionValue("parallel", "on")
-        read_status = self.highspy_interface.readModel(filename)
-        if read_status != highspy.HighsStatus.kOk:
-            raise ValueError(f"Unable to read optimization model: {read_status}")
+        solver = pyo.SolverFactory("highs")
+        if not solver.available(exception_flag=False):
+            raise RuntimeError("Pyomo HiGHS solver is not available")
 
-        LOGGER.info(f"Loaded optimization model with {self.highspy_interface.getNumRow()} constraints")
+        solver.options["mip_rel_gap"] = mip_gap
+        solver.options["mip_improving_solution_save"] = False
+        solver.options["presolve"] = "on"
+        solver.options["output_flag"] = False
+        solver.options["log_to_console"] = False
+        solver.options["parallel"] = "on"
 
-        self.highspy_interface.readModel(filename)
+        constraint_count = sum(
+            1 for _ in self.model.component_data_objects(pyo.Constraint, active=True)
+        )
+        LOGGER.info(f"Loaded optimization model with {constraint_count} constraints")
+
         start = time.time()
-        self.highspy_interface.run()
+        results = solver.solve(self.model)
         end = time.time()
         LOGGER.info(f"Time to solve: {end - start} seconds")
-        model_status = self.highspy_interface.getModelStatus()
 
-        if not (self.highspy_interface.modelStatusToString(model_status) == "Optimal" or self.highspy_interface.modelStatusToString(model_status) == "Solve error"):
-            LOGGER.error(f"Status = {self.highspy_interface.modelStatusToString(model_status)}")
-            raise ValueError(f"Status = {self.highspy_interface.modelStatusToString(model_status)}")
-        else:
-            self.solution = self.highspy_interface.getSolution()
+        termination_condition = results.solver.termination_condition
+        if termination_condition != pyo.TerminationCondition.optimal:
+            LOGGER.error(f"Status = {termination_condition}")
+            raise ValueError(f"Status = {termination_condition}")
 
-        os.remove(filename)
+        self.prev_solution = {
+            name: {
+                index: float(pyo.value(variable))
+                for index, variable in component.items()
+            }
+            for name, component in self.model.component_map(ctype=pyo.Var).items()
+            if component.is_indexed()
+        }
 
 
     def _create_initial_grid_costs(self):

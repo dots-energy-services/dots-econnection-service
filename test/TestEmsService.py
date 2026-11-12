@@ -271,7 +271,7 @@ class TestEmsOptimization(EmsTest):
         start_date_time = datetime(2024,1,14, 0, 15, 0)
         for i in range(1, n_time_steps_possible_charge + 1):
             time_steps_to_charge_remaining = n_time_steps_possible_charge - i
-            edemand_param['day_ahead_prices'] = [10.23 for _ in range(time_steps_to_charge_remaining)] + [800.0 for _ in range(48 - time_steps_to_charge_remaining)]
+            edemand_param['day_ahead_prices'] = [1.23 for _ in range(time_steps_to_charge_remaining)] + [80.0 for _ in range(48 - time_steps_to_charge_remaining)]
             date_time = start_date_time + timedelta(seconds=i*900)
             time_step = TimeStepInformation(i,96)
             ret_val = service.calculate_dispatch(edemand_param, date_time, time_step, esdl_id_to_test, energy_system)

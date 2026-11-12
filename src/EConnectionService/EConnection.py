@@ -2,7 +2,6 @@
 from datetime import datetime, timedelta
 from re import match
 import re
-import highspy
 import helics as h
 from dots_infrastructure.EsdlProfileParsingClasses import ParsedDateTimeProfile, ParsedTimeSeriesProfile
 from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation, TimeRequestType
@@ -22,7 +21,6 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
     def __init__(self):
         super().__init__()
-        self.highspy_interface = highspy.Highs()
 
         subscriptions_values = [
             SubscriptionDescription(esdl_type="EnvironmentalProfiles",
@@ -179,6 +177,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         self.dynamic_flat_prices: dict[EsdlId, float] = {}
         self.esdl_entity_parser = EsdlEntityParameterParser()
         self.hw_heating_demand_profiles: dict[EsdlId, ParsedTimeSeriesProfile] = {}
+        self.optimization_problems : dict[EsdlId, PortfolioOptimizationProblem] = {}
 
         # Fixed global data, the same for all econnections
         self.optimization_horizon = 48  # number of time steps
@@ -311,7 +310,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             problem = self.create_portfolio_optimization_problem(scaled_param_dict, time_step_number, esdl_id, congestion_signal, simulation_time)
 
             # Solve problem
-            problem.solve(mip_gap=0.001)  # mip_gap=0.07
+            problem.solve(mip_gap=0.01)  # mip_gap=0.07
             LOGGER.info("Optimization problem solved")
 
             # Get peak tariff if necessary
@@ -349,8 +348,13 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         time_step_nr = time_step_number.current_time_step_number
         asset_portfolio = self.asset_portfolios[esdl_id]
 
-        # Create optimization problem
-        problem = PortfolioOptimizationProblem(self.esdl_entity_parser, self.highspy_interface)
+        if esdl_id not in self.optimization_problems:
+            problem = PortfolioOptimizationProblem(self.esdl_entity_parser, self.optimization_horizon)
+            self.optimization_problems[esdl_id] = problem
+
+        # init problem
+        problem = self.optimization_problems[esdl_id]
+        problem.init_problem()
         time_params = {'n_steps': self.optimization_horizon,
                        'dt': self.ems_time_step_seconds,
                        'time_step_nr': time_step_nr}
