@@ -161,8 +161,8 @@ class PortfolioOptimizationProblem:
         self.model.con_soc_ev_arr = pyo.Constraint(self.model.time_index_soc, rule=arrival_constraint_f)
 
         def departure_constraint_f_low(model, t):
-            if t in departure_ptus:
-                return model.soc_ev[t] >= departure_ptus_dict[t]
+            if t in departure_ptus and t < model.time_index_soc.last():
+                return model.soc_ev[t+1] >= departure_ptus_dict[t]
             else:
                 return pyo.Constraint.Skip
 
