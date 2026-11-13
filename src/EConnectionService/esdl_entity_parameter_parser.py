@@ -168,9 +168,9 @@ class EsdlEntityParameterParser:
             ev_d = json.loads(ev.description)
             ptu = 1
             while current_datetime <= end_date_time:
-                profile_elem_arr = next((elem for elem in datetime_profile.element if current_datetime <= elem.from_ < current_datetime + timedelta(seconds=time_step_in_seconds) and elem.from_ >= simulation_start_time), None)
-                profile_elem_dep = next((elem for elem in datetime_profile.element if current_datetime <= elem.to < current_datetime + timedelta(seconds=time_step_in_seconds) and elem.to <= end_date_time), None)
-                if profile_elem_arr:
+                profile_elem_arr = next((elem for elem in datetime_profile.element if current_datetime <= elem.from_ < current_datetime + timedelta(seconds=time_step_in_seconds) and elem.from_ >= simulation_start_time and elem.to <= end_date_time), None)
+                profile_elem_dep = next((elem for elem in datetime_profile.element if current_datetime <= elem.to < current_datetime + timedelta(seconds=time_step_in_seconds) and elem.to <= end_date_time and elem.from_ >= simulation_start_time), None)
+                if profile_elem_arr is not None:
                     arrival_ptus[ptu] = 0.8 * ev_d['max_soc_kwh'] - profile_elem_arr.value
                 if profile_elem_dep is not None and len(departure_ptus) == len(arrival_ptus) - 1:
                     departure_ptus[ptu] = 0.8 * ev_d['max_soc_kwh']
@@ -193,7 +193,7 @@ class EsdlEntityParameterParser:
         if timestep_information.current_time_step_number + 1 in ev_params.arrival_ptus:
             ev_params.current_soc_kwh = ev_params.arrival_ptus[timestep_information.current_time_step_number + 1]
             dep_ptu = next(dep_ptu for arr_ptu, dep_ptu in zip(ev_params.arrival_ptus, ev_params.departure_ptus))
-            ev_params.min_soc_kwh = departure_ptus[dep_ptu]
+            ev_params.min_soc_kwh = ev_params.departure_ptus[dep_ptu]
         elif timestep_information.current_time_step_number - 1 in ev_params.departure_ptus or -eps < ev_params.current_soc_kwh < 0:
             ev_params.current_soc_kwh = 0
             ev_params.min_soc_kwh = 0
