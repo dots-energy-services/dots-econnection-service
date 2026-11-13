@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
-from re import match
 import re
 import highspy
 import helics as h
 from dots_infrastructure.EsdlProfileParsingClasses import ParsedDateTimeProfile, ParsedTimeSeriesProfile
-from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation, TimeRequestType
+from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation
 from dots_infrastructure.HelicsFederateHelpers import HelicsSimulationExecutor
 from dots_infrastructure.Logger import LOGGER
-from esdl import DateTimeProfile, ElectricityDemand, ElectricityNetwork, HeatDemandTypeEnum, HeatPump, HeatingDemand, HybridHeatPump, OutPort, esdl, EnergySystem
+from esdl import ElectricityDemand, ElectricityNetwork, HeatDemandTypeEnum, HeatPump, HeatingDemand, HybridHeatPump, OutPort, esdl, EnergySystem
 
 import json
 import numpy as np
@@ -179,6 +178,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         self.dynamic_flat_prices: dict[EsdlId, float] = {}
         self.esdl_entity_parser = EsdlEntityParameterParser()
         self.hw_heating_demand_profiles: dict[EsdlId, ParsedTimeSeriesProfile] = {}
+        self.optimization_problems : dict[EsdlId, PortfolioOptimizationProblem] = {}
 
         # Fixed global data, the same for all econnections
         self.optimization_horizon = 48  # number of time steps
@@ -311,7 +311,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             problem = self.create_portfolio_optimization_problem(scaled_param_dict, time_step_number, esdl_id, congestion_signal, simulation_time)
 
             # Solve problem
-            problem.solve(mip_gap=0.001)  # mip_gap=0.07
+            problem.solve(mip_gap=0.01)  # mip_gap=0.07
             LOGGER.info("Optimization problem solved")
 
             # Get peak tariff if necessary
@@ -349,8 +349,13 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         time_step_nr = time_step_number.current_time_step_number
         asset_portfolio = self.asset_portfolios[esdl_id]
 
-        # Create optimization problem
-        problem = PortfolioOptimizationProblem(self.esdl_entity_parser, self.highspy_interface)
+        if esdl_id not in self.optimization_problems:
+            problem = PortfolioOptimizationProblem(self.esdl_entity_parser, self.optimization_horizon)
+            self.optimization_problems[esdl_id] = problem
+
+        # init problem
+        problem = self.optimization_problems[esdl_id]
+        problem.init_problem()
         time_params = {'n_steps': self.optimization_horizon,
                        'dt': self.ems_time_step_seconds,
                        'time_step_nr': time_step_nr}
@@ -418,7 +423,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         if 'EVChargingStation' in asset_portfolio:
             ev_charging_station = asset_portfolio['EVChargingStation']['esdl_object']
-            ev_params = self.esdl_entity_parser.get_ev_parameters(ev_charging_station, self.simulator_configuration.start_time, self.simulator_configuration.simulation_duration_in_seconds, self.ems_time_step_seconds, simulation_time, time_step_number)
+            ev_params = self.esdl_entity_parser.get_ev_parameters(ev_charging_station, self.simulator_configuration.start_time, self.simulator_configuration.simulation_duration_in_seconds, self.ems_time_step_seconds, time_step_number)
             problem.create_ev_charging_station(ev_params)
 
         # Create energy balance constraints, grid tariff constraints and the objective function
@@ -606,16 +611,17 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             predicted_aggregated_reactive_power += q
 
         if 'EVChargingStation' in asset_portfolio:
-            p_ev_w = problem.get_first_value_from_component('p_ev') * 1000
-            ret_val['dispatch_ev'] = p_ev_w
             ev = asset_portfolio['EVChargingStation']['esdl_object']
-            soc_ev = p_ev_w / 1000 * (self.ems_time_step_seconds/3600)
+            soc_ev = problem.get_value_from_component_at_time_index('soc_ev', 1)
+            self.influx_connector.set_time_step_data_point(esdl_id, 'soc_ev', simulation_time, soc_ev)
             self.esdl_entity_parser.set_soc_ev(ev, soc_ev)
+            p_ev_w = self.get_power_value_ev_at_index(problem, 0)
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'EVChargingStation', p_ev_w)
             aggregated_active_power += p
             aggregated_reactive_power += q
+            ret_val['dispatch_ev'] = p_ev_w
             
-            p_ev_w = problem.get_value_from_component_at_time_index('p_ev', 1) * 1000
+            p_ev_w = self.get_power_value_ev_at_index(problem, 1)
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'EVChargingStation', p_ev_w)
             predicted_aggregated_active_power += p
             predicted_aggregated_reactive_power += q
@@ -641,6 +647,14 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         battery : esdl.Battery = asset_portfolio['Battery']['esdl_object']
         p_battery = battery.chargeEfficiency * p_ch_w - battery.dischargeEfficiency * (p_bat_use_w + p_bat_sell_w)
         return p_battery
+
+    def get_power_value_ev_at_index(self, problem : PortfolioOptimizationProblem, index : int):
+        p_ch_w = problem.get_value_from_component_at_time_index('p_ev', index) * 1000
+        p_bat_use_w = problem.get_value_from_component_at_time_index('p_ev_use', index) * 1000
+        p_bat_sell_w = problem.get_value_from_component_at_time_index('p_ev_sell', index) * 1000
+        
+        p_ev = p_ch_w - (p_bat_use_w + p_bat_sell_w)
+        return p_ev
 
     def get_power_value_pv_at_index(self, problem : PortfolioOptimizationProblem, index : int):
         p_use_w = - problem.get_value_from_component_at_time_index('p_pv_use', index) * 1000
