@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
-from re import match
 import re
+import highspy
 import helics as h
 from dots_infrastructure.EsdlProfileParsingClasses import ParsedDateTimeProfile, ParsedTimeSeriesProfile
-from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation, TimeRequestType
+from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation
 from dots_infrastructure.HelicsFederateHelpers import HelicsSimulationExecutor
 from dots_infrastructure.Logger import LOGGER
-from esdl import DateTimeProfile, ElectricityDemand, ElectricityNetwork, HeatDemandTypeEnum, HeatPump, HeatingDemand, HybridHeatPump, OutPort, esdl, EnergySystem
+from esdl import ElectricityDemand, ElectricityNetwork, HeatDemandTypeEnum, HeatPump, HeatingDemand, HybridHeatPump, OutPort, esdl, EnergySystem
 
 import json
 import numpy as np
@@ -21,6 +21,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
     def __init__(self):
         super().__init__()
+        self.highspy_interface = highspy.Highs()
 
         subscriptions_values = [
             SubscriptionDescription(esdl_type="EnvironmentalProfiles",

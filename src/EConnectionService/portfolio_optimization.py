@@ -1,5 +1,6 @@
 import time
 import esdl
+import highspy
 import pyomo.environ as pyo
 import numpy as np
 from dots_infrastructure.Logger import LOGGER
@@ -18,6 +19,7 @@ class PortfolioOptimizationProblem:
 
     def init_problem(self):
         self.model = pyo.ConcreteModel()
+        self.highspy_interface = highspy.Highs()
         self.connection_capacity = 17.0  # TODO: remove magic number
         self.has_grid_tariff = False
         self.has_heat_pump = False
