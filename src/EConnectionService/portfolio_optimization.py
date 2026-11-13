@@ -656,54 +656,51 @@ class PortfolioOptimizationProblem:
         self.has_hybrid_heat_pump = True
 
     def create_energy_balance(self, asset_portfolio: dict):
-        self.model.e_prosumed = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
         self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        # self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
+        self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
 
-        self.model.con_energy_e_prosumed_up = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            m.e_prosumed[t] <= self.connection_capacity * m.dt
-        )
-        self.model.con_energy_e_prosumed_low = pyo.Constraint(
-            self.model.time_index_p, rule=lambda m, t:
-            -self.connection_capacity * m.dt <= m.e_prosumed[t]
-        )
+        capacity = 17.0  # TODO: remove magic number
         self.model.con_energy_buy_ub = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.e_buy[t] <= self.connection_capacity * m.dt
+            m.e_buy[t] <= m.z_buy[t] * capacity * m.dt
         )
 
         self.model.con_energy_sell_ub = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.e_sell[t] <= self.connection_capacity * m.dt
+            m.e_sell[t] <= (1 - m.z_buy[t]) * capacity * m.dt
         )
 
-        def con_energy_e_prosumed_f(m, t):
-            e_prosumed = 0.0
+        def con_energy_buy_f(m, t):
+            e_buy = 0.0
             if 'ElectricityDemand' in asset_portfolio:
-                e_prosumed += m.p_edemand[t] * m.dt
+                e_buy += m.p_edemand[t] * m.dt
             if 'PVInstallation' in asset_portfolio:
-                e_prosumed -= m.p_pv_use[t] * m.dt
-                e_prosumed -= m.p_pv_sell[t] * m.dt
-            if 'HeatPump' in asset_portfolio:
-                e_prosumed += m.p_hp[t] * m.dt
-            if 'HybridHeatPump' in asset_portfolio:
-                e_prosumed += m.p_hhp[t] * m.dt
+                e_buy -= m.p_pv_use[t] * m.dt
             if 'Battery' in asset_portfolio:
-                e_prosumed -= m.p_bat_sell[t] * m.dt
-                e_prosumed += m.p_ch[t] * m.dt
-                e_prosumed -= m.p_bat_use[t] * m.dt
+                e_buy += (m.p_ch[t] - m.p_bat_use[t]) * m.dt
+            if 'HeatPump' in asset_portfolio:
+                e_buy += m.p_hp[t] * m.dt
+            if 'HybridHeatPump' in asset_portfolio:
+                e_buy += m.p_hhp[t] * m.dt
             if 'EVChargingStation' in asset_portfolio:
-                e_prosumed -= m.p_ev_sell[t] * m.dt
-                e_prosumed += m.p_ev[t] * m.dt
-                e_prosumed -= m.p_ev_use[t] * m.dt
+                e_buy += (m.p_ev[t] - m.p_ev_use[t]) * m.dt
 
-            return m.e_prosumed[t] == e_prosumed
+            return m.e_buy[t] == e_buy
 
-        self.model.con_energy_prosumed = pyo.Constraint(self.model.time_index_p, rule=con_energy_e_prosumed_f)
+        self.model.con_energy_buy = pyo.Constraint(self.model.time_index_p, rule=con_energy_buy_f)
 
-        self.model.con_energy_balance = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: -m.e_sell[t] + m.e_buy[t] == m.e_prosumed[t])
+        def con_energy_sell_f(m, t):
+            e_sell = 0.0
+            if 'PVInstallation' in asset_portfolio:
+                e_sell += m.p_pv_sell[t] * m.dt
+            if 'Battery' in asset_portfolio:
+                e_sell += m.p_bat_sell[t] * m.dt
+            if 'EVChargingStation' in asset_portfolio:
+                e_sell += m.p_ev_sell[t] * m.dt
+            return m.e_sell[t] == e_sell
+
+        self.model.con_energy_sell = pyo.Constraint(self.model.time_index_p, rule=con_energy_sell_f)
 
     def get_first_value_from_component(self, name: str):
         component = self.model.find_component(name)
