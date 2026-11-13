@@ -613,6 +613,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         if 'EVChargingStation' in asset_portfolio:
             ev = asset_portfolio['EVChargingStation']['esdl_object']
             soc_ev = problem.get_value_from_component_at_time_index('soc_ev', 1)
+            self.influx_connector.set_time_step_data_point(esdl_id, 'soc_ev', simulation_time, soc_ev)
             self.esdl_entity_parser.set_soc_ev(ev, soc_ev)
             p_ev_w = self.get_power_value_ev_at_index(problem, 0)
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'EVChargingStation', p_ev_w)
