@@ -611,22 +611,16 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
             predicted_aggregated_reactive_power += q
 
         if 'EVChargingStation' in asset_portfolio:
-            p_ev_w = problem.get_first_value_from_component('p_ev') * 1000
-            ret_val['dispatch_ev'] = p_ev_w
             ev = asset_portfolio['EVChargingStation']['esdl_object']
             soc_ev = problem.get_value_from_component_at_time_index('soc_ev', 1)
-            p_ev = problem.get_value_from_component_at_time_index('p_ev', 0)
-            p_ev_use = problem.get_value_from_component_at_time_index('p_ev_use', 0)
-            p_ev_sell = problem.get_value_from_component_at_time_index('p_ev_sell', 0)
-            LOGGER.info(f"p_ev: {p_ev}")
-            LOGGER.info(f"p_ev_use: {p_ev_use}")
-            LOGGER.info(f"p_ev_sell: {p_ev_sell}")
             self.esdl_entity_parser.set_soc_ev(ev, soc_ev)
+            p_ev_w = self.get_power_value_ev_at_index(problem, 0)
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'EVChargingStation', p_ev_w)
             aggregated_active_power += p
             aggregated_reactive_power += q
+            ret_val['dispatch_ev'] = p_ev_w
             
-            p_ev_w = problem.get_value_from_component_at_time_index('p_ev', 1) * 1000
+            p_ev_w = self.get_power_value_ev_at_index(problem, 1)
             p, q = self.get_p_q_3ph_from_asset(asset_portfolio, 'EVChargingStation', p_ev_w)
             predicted_aggregated_active_power += p
             predicted_aggregated_reactive_power += q
@@ -652,6 +646,14 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         battery : esdl.Battery = asset_portfolio['Battery']['esdl_object']
         p_battery = battery.chargeEfficiency * p_ch_w - battery.dischargeEfficiency * (p_bat_use_w + p_bat_sell_w)
         return p_battery
+
+    def get_power_value_ev_at_index(self, problem : PortfolioOptimizationProblem, index : int):
+        p_ch_w = problem.get_value_from_component_at_time_index('p_ev', index) * 1000
+        p_bat_use_w = problem.get_value_from_component_at_time_index('p_ev_use', index) * 1000
+        p_bat_sell_w = problem.get_value_from_component_at_time_index('p_ev_sell', index) * 1000
+        
+        p_ev = p_ch_w - (p_bat_use_w + p_bat_sell_w)
+        return p_ev
 
     def get_power_value_pv_at_index(self, problem : PortfolioOptimizationProblem, index : int):
         p_use_w = - problem.get_value_from_component_at_time_index('p_pv_use', index) * 1000
