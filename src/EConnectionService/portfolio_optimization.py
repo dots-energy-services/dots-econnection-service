@@ -118,22 +118,22 @@ class PortfolioOptimizationProblem:
         )
         self.model.con_ev_dch_limit_upper = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-             1 / m.ch_eff_ev * (m.p_ev_use[t] + m.p_ev_sell[t]) <= m.z_dis_ch_ev[t] * m.max_ch_rate_ev
+             1 / m.ch_eff_ev * (m.p_ev_use[t] + m.p_ev_sell[t]) <= m.z_dis_ch_ev[t] * m.max_ch_rate_ev * m.availability_ev[t]
         )
 
         self.model.con_ev_dch_limit_lower = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-             1 / m.ch_eff_ev * (m.p_ev_use[t] + m.p_ev_sell[t]) >= m.z_dis_ch_ev[t] * m.min_ch_rate_ev
+             1 / m.ch_eff_ev * (m.p_ev_use[t] + m.p_ev_sell[t]) >= m.z_dis_ch_ev[t] * m.min_ch_rate_ev * m.availability_ev[t]
         )
 
         self.model.con_ev_ch_limit_upper = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.p_ev[t] <= m.z_ch_ev[t] * m.max_ch_rate_ev
+            m.p_ev[t] <= m.z_ch_ev[t] * m.max_ch_rate_ev * m.availability_ev[t]
         )
 
         self.model.con_ev_ch_limit_lower = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.p_ev[t] >= m.z_ch_ev[t] * m.min_ch_rate_ev
+            m.p_ev[t] >= m.z_ch_ev[t] * m.min_ch_rate_ev * m.availability_ev[t]
         )
 
         self.model.con_soc_ev_0_low = pyo.Constraint(
