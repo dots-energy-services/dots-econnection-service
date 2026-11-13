@@ -192,7 +192,7 @@ class EsdlEntityParameterParser:
         eps = 1.0e-3
         if timestep_information.current_time_step_number + 1 in ev_params.arrival_ptus:
             ev_params.current_soc_kwh = ev_params.arrival_ptus[timestep_information.current_time_step_number + 1]
-            dep_ptu = next(dep_ptu for arr_ptu, dep_ptu in zip(arrival_ptus, departure_ptus))
+            dep_ptu = next(dep_ptu for arr_ptu, dep_ptu in zip(ev_params.arrival_ptus, ev_params.departure_ptus))
             ev_params.min_soc_kwh = departure_ptus[dep_ptu]
         elif timestep_information.current_time_step_number - 1 in ev_params.departure_ptus or -eps < ev_params.current_soc_kwh < 0:
             ev_params.current_soc_kwh = 0
