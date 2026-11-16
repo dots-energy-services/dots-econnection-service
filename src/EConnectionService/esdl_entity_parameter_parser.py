@@ -3,6 +3,7 @@ import json
 from typing import List
 import esdl
 from dataclasses import dataclass
+import math
 
 from dots_infrastructure.DataClasses import TimeStepInformation
 from dots_infrastructure.Logger import LOGGER
@@ -81,16 +82,60 @@ class EsdlEntityParameterParser:
 
     def get_building_parameters(self, building: esdl.Building) -> BuildingParameters:
         key = id(building)
+        building_features   = ["buildingYear", "floorArea", "numberOfFloors", "surfaceArea"]
+        building_info       = ["slantedRoofArea", "wallArea", "flatRoofArea", "windowArea", "height", "rcWall", "rcRoof",
+                                "rcFloor", "uWindow", "doorArea", "uDoor"]
+        # Constants house heat calculations
+        U_occupants_appliances  = 5     # [W/m2]
+        heatcapacity_air        = 1230  # [J/m3]
         if key not in self._building_cache:
-            building_d = json.loads(building.description)
+            building_data = {}
+            for feature in building.eClass.eAllStructuralFeatures():
+                if feature.name in building_features:
+                    value = getattr(building, feature.name)
+                    if value not in [None, 0, 0.0]:
+                        building_data[feature.name] = value
+            for bi in building.buildinginformation:
+                for field in building_info:
+                    value = getattr(bi, field, None)
+                    # Store only non-zero values
+                    if value not in [None, 0, 0.0]:
+                        building_data[field] = value
+
+            building_data["roofArea"] = (building_data.get("slantedRoofArea", 0)
+                                         + building_data.get("flatRoofArea", 0))
+
+            if building_data["buildingYear"] <= 1967:
+                qv10 = 4.0  # [dm3/s/m2]
+            else:
+                qv10 = 0.3 + 3.7 * math.exp((1967 - building_data["buildingYear"]) / 16)  # [dm3/s/m2]
+
+            uservolume = building_data["surfaceArea"] * (building_data["height"] / building_data["numberOfFloors"])
+            ratio = 0.22  # 0.22
+            C_in = (0.0784 * uservolume + 1.97) * 1e6
+            C_out = (C_in / ratio) * (1 - ratio)
+
+            UA_vent = heatcapacity_air * (qv10 * (10 ** -0.7) * 10 ** -3) * building_data["surfaceArea"]
+            UA_exch = U_occupants_appliances * building_data["surfaceArea"]
+            UA_floor = building_data["floorArea"] / building_data["rcFloor"]
+            UA_transm = (building_data["wallArea"] / building_data["rcWall"]) + (
+                    (building_data["roofArea"]) / building_data["rcRoof"]) + (
+                                building_data["windowArea"] * building_data["uWindow"]) + (
+                                building_data["doorArea"] * building_data["uDoor"])
+            R_vent = 1 / UA_vent
+            R_exch = 1 / UA_exch
+            R_floor = 1 / UA_floor
+            R_cond = 1 / UA_transm - 1 / UA_exch
+
+            # building_d = json.loads(building.description)
             self._building_cache[key] = BuildingParameters(
-                C_in_kwh=building_d['C_in'] / 3.6e6,
-                C_out_kwh=building_d['C_out'] / 3.6e6,
-                R_exch=building_d['R_exch'] * 1000,
-                R_floor=building_d['R_floor'] * 1000,
-                R_vent=building_d['R_vent'] * 1000,
-                R_cond=building_d['R_cond'] * 1000,
-                A_glass=building_d['A_glass']
+                C_in_kwh=C_in / 3.6e6,
+                C_out_kwh=C_out / 3.6e6,
+                R_exch=R_exch * 1000,
+                R_floor=R_floor * 1000,
+                R_vent=R_vent * 1000,
+                R_cond=R_cond * 1000,
+                A_glass=building_data["windowArea"]
             )
         return self._building_cache[key]
 
@@ -99,55 +144,107 @@ class EsdlEntityParameterParser:
         hhp: esdl.HybridHeatPump
     ) -> HybridHeatPumpParameters:
         key = hhp.id
+        density_water           = 1000  # [kg/m3]
+        specific_heat_water     = 4183  # [J/(kg K)]
         if key not in self._hybrid_heatpump_cache:
-            hhp_d = json.loads(hhp.description)
+            building = hhp.eContainer()
+            for asset in building.asset:
+                if type(asset).__name__ == "WaterBuffer":
+                    if "sh_buffer" in asset.name:
+                        buffer_volume = asset.volume
+                        buffer_capacitance = (buffer_volume * density_water * specific_heat_water)
+                        buffer_temp_min = asset.minStorageTemperature + 273.15
+                        buffer_temp_max = asset.maxStorageTemperature + 273.15
+                        buffer_temp_set = (buffer_temp_min + buffer_temp_max) / 2
+                        heating_demand = next(
+                            connected_to.eContainer()
+                            for port in asset.port
+                            for connected_to in port.connectedTo
+                            if isinstance(connected_to.eContainer(), esdl.HeatingDemand))
+                        house_temp_min = heating_demand.minTemperature + 273.15
+                        house_temp_max = heating_demand.maxTemperature + 273.15
+            connected_ports = [port for port in hhp.port if len(port.connectedTo) > 0]
+            for connected_port in connected_ports:
+                for entity in connected_port.connectedTo:
+                    if isinstance(entity.eContainer(), esdl.HeatingDemand) and entity.eContainer().type == esdl.HeatDemandTypeEnum.from_string('HOT_TAPWATER'):
+                        dhw_temp_set = heating_demand.minTemperature + 273.15
             self._hybrid_heatpump_cache[key] = HybridHeatPumpParameters(
-                buffer_capacitance_kwh=hhp_d['buffer_capacitance'] / 3.6e6,
-                heat_thermal_power_kw=hhp.heatPumpThermalPower * 0.001,
-                house_temp_set=hhp_d['house_temp_set'],
-                house_temp_min=hhp_d['house_temp_min'],
-                house_temp_max=hhp_d['house_temp_max'],
-                house_temp_hor=hhp_d['house_temp_hor'],
-                house_temp_0=hhp_d['house_temp_0'],
-                buffer_temp_set=hhp_d['buffer_temp_set'],
-                buffer_temp_min=hhp_d['buffer_temp_min'],
-                buffer_temp_max=hhp_d['buffer_temp_max'],
-                buffer_temp_0=hhp_d['buffer_temp_0'],
-                buffer_temp_hor=hhp_d['buffer_temp_hor'],
-                dhw_temp_set=hhp_d['dhw_temp_set'],
-                dhw_temp_tap=hhp_d['dhw_temp_tap'],
-                gass_heater_efficiency=hhp.gasHeaterEfficiency,
-                gass_heater_thermal_power_kw=hhp.gasHeaterThermalPower * 0.001
+                buffer_capacitance_kwh=buffer_capacitance / 3.6e6,
+                heat_thermal_power_kw=hhp.heatPumpThermalPower * 0.001, # hhp.heatPumpThermalPower
+                house_temp_set=house_temp_min,
+                house_temp_min=house_temp_min,
+                house_temp_max=house_temp_max,
+                house_temp_hor=house_temp_min,
+                house_temp_0=house_temp_min,
+                buffer_temp_set=buffer_temp_set,
+                buffer_temp_min=buffer_temp_min,
+                buffer_temp_max=buffer_temp_max,
+                buffer_temp_0=buffer_temp_set,
+                buffer_temp_hor=buffer_temp_set,
+                dhw_temp_set=dhw_temp_set,
+                dhw_temp_tap=288.15,                                    # 15 degrees C
+                gass_heater_efficiency= 0.96,                           #hhp.gasHeaterEfficiency,
+                gass_heater_thermal_power_kw= 18000.0 * 0.001           #hhp.gasHeaterThermalPower * 0.001
             )
         return self._hybrid_heatpump_cache[key]
 
     def get_heatpump_parameters(self, hp: esdl.HeatPump) -> HeatPumpParameters:
         key = hp.id
+        density_water           = 1000  # [kg/m3]
+        specific_heat_water     = 4183  # [J/(kg K)]
         if key not in self._heatpump_cache:
-            hp_d = json.loads(hp.description)
+            building = hp.eContainer()
+            for asset in building.asset:
+                if type(asset).__name__ == "WaterBuffer":
+                    if "sh_buffer" in asset.name:
+                        buffer_volume = asset.volume
+                        buffer_capacitance = (buffer_volume * density_water * specific_heat_water)
+                        buffer_temp_min = asset.minStorageTemperature + 273.15
+                        buffer_temp_max = asset.maxStorageTemperature + 273.15
+                        buffer_temp_set = (buffer_temp_min + buffer_temp_max) / 2
+                        heating_demand = next(
+                            connected_to.eContainer()
+                            for port in asset.port
+                            for connected_to in port.connectedTo
+                            if isinstance(connected_to.eContainer(), esdl.HeatingDemand))
+                        house_temp_min = heating_demand.minTemperature + 273.15
+                        house_temp_max = heating_demand.maxTemperature + 273.15
+                    elif "hw_buffer" in asset.name:
+                        dhw_volume = asset.volume
+                        dhw_capacitance = (dhw_volume * density_water * specific_heat_water)
+                        dhw_temp_min = asset.minStorageTemperature + 273.15
+                        dhw_temp_tap = asset.minStorageTemperature + 273.15
+                        heating_demand = next(
+                            connected_to.eContainer()
+                            for port in asset.port
+                            for connected_to in port.connectedTo
+                            if isinstance(connected_to.eContainer(), esdl.HeatingDemand)
+                        )
+                        dhw_temp_set = heating_demand.minTemperature + 273.15
+                        dhw_temp_max = heating_demand.maxTemperature + 273.15
             self._heatpump_cache[key] = HeatPumpParameters(
-                buffer_capacitance_kwh=hp_d['buffer_capacitance'] / 3.6e6,
-                dhw_capacitance_kwh=hp_d['dhw_capacitance'] / 3.6e6,
-                heat_element_kw=hp_d['heat_element'] * 0.001,
+                buffer_capacitance_kwh=buffer_capacitance / 3.6e6,
+                dhw_capacitance_kwh=dhw_capacitance / 3.6e6,
+                heat_element_kw= 3000 * 0.001,                  # check to add to esdl
                 power_kw=hp.power * 0.001,
-                dhw_temperature_set=hp_d['dhw_temp_set'],
-                buffer_temp_set=hp_d['buffer_temp_set'],
-                buffer_temp_min=hp_d['buffer_temp_min'],
-                buffer_temp_max=hp_d['buffer_temp_max'],
-                buffer_temp_0=hp_d['buffer_temp_0'],
-                buffer_temp_hor=hp_d['buffer_temp_hor'],
-                dhw_temp_set=hp_d['dhw_temp_set'],
-                dhw_temp_min=hp_d['dhw_temp_min'],
-                dhw_temp_max=hp_d['dhw_temp_max'],
-                dhw_temp_0=hp_d['dhw_temp_0'],
-                dhw_temp_hor=hp_d['dhw_temp_hor'],
-                dhw_temp_tap=hp_d['dhw_temp_tap'],
-                cop_element=hp_d['cop_element'],
-                house_temp_set=hp_d['house_temp_set'],
-                house_temp_min=hp_d['house_temp_min'],
-                house_temp_max=hp_d['house_temp_max'],
-                house_temp_hor=hp_d['house_temp_hor'],
-                house_temp_0=hp_d['house_temp_0']
+                dhw_temperature_set=dhw_temp_set,
+                buffer_temp_set=buffer_temp_set,
+                buffer_temp_min=buffer_temp_min,
+                buffer_temp_max=buffer_temp_max,
+                buffer_temp_0=buffer_temp_set,
+                buffer_temp_hor=buffer_temp_set,
+                dhw_temp_set=dhw_temp_set,
+                dhw_temp_min=dhw_temp_min,
+                dhw_temp_max=dhw_temp_max,
+                dhw_temp_0=dhw_temp_set,
+                dhw_temp_hor=dhw_temp_set,
+                dhw_temp_tap=dhw_temp_tap,
+                cop_element=hp.COP,
+                house_temp_set=house_temp_min,
+                house_temp_min=house_temp_min,
+                house_temp_max=house_temp_max,
+                house_temp_hor=house_temp_min,
+                house_temp_0=house_temp_min
             )
         return self._heatpump_cache[key]
 

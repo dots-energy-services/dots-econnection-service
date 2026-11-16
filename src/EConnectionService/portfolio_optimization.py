@@ -229,6 +229,9 @@ class PortfolioOptimizationProblem:
         soil_temperature_dict = self.it2dict(soil_temperature)
         solar_irradiance_dict = self.it2dict(solar_irradiance)
 
+        air_temperature_dict = {k: v + 273.15 for k, v in air_temperature_dict.items()}
+        soil_temperature_dict = {k: v + 273.15 for k, v in soil_temperature_dict.items()}
+
         # Parameters
         # Weather
         self.model.T_air = pyo.Param(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=air_temperature_dict)
@@ -313,7 +316,7 @@ class PortfolioOptimizationProblem:
         self.model.slack_soc_max = pyo.Param(self.model.time_index_soc, within=pyo.NonNegativeReals, initialize=0)
         self.model.slack_soc_min = pyo.Param(self.model.time_index_soc, within=pyo.NonNegativeReals, initialize=0)
 
-        # Constraints
+        # # Constraints
         self.model.con_hp_ch_min_dhw = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
             m.Q_to_dhw_tank[t] >= m.z_on_dhw[t] * m.min_rel_heat * m.Q_nom
@@ -449,6 +452,9 @@ class PortfolioOptimizationProblem:
         soil_temperature_dict = self.it2dict(soil_temperature)
         solar_irradiance_dict = self.it2dict(solar_irradiance)
 
+        air_temperature_dict = {k: v + 273.15 for k, v in air_temperature_dict.items()}
+        soil_temperature_dict = {k: v + 273.15 for k, v in soil_temperature_dict.items()}
+
         # Parameters
         # Weather
         self.model.T_air = pyo.Param(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=air_temperature_dict)
@@ -463,6 +469,7 @@ class PortfolioOptimizationProblem:
         capacitance_matrix = np.diag(np.array([building_params.C_in_kwh, building_params.C_out_kwh]))
         heat_capacity_water = 4183/3.6e6
         dhw_heat_profile = np.array(dhw_profile) * heat_capacity_water * (hybrid_heat_pump_params.dhw_temp_set - hybrid_heat_pump_params.dhw_temp_tap)
+
         dhw_heat_profile_dict = self.it2dict(dhw_heat_profile)
 
         # DHW
