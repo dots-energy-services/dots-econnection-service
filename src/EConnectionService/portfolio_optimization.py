@@ -68,7 +68,6 @@ class PortfolioOptimizationProblem:
             ('p_ev_sell', len(self.model.time_index_p)),
             ('z_ch_ev', len(self.model.time_index_p)),
             ('z_dis_ch_ev', len(self.model.time_index_p)),
-
         ]
         previous_values = self.get_previous_values_from_solution(prev_var_names)
 
@@ -656,6 +655,7 @@ class PortfolioOptimizationProblem:
 
     def create_energy_balance(self, asset_portfolio: dict):
         self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        # self.model.e_sell_no_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
 
@@ -665,10 +665,16 @@ class PortfolioOptimizationProblem:
             m.e_buy[t] <= m.z_buy[t] * capacity * m.dt
         )
 
+        # self.model.con_energy_sell_no_ev_ub = pyo.Constraint(
+        #     self.model.time_index_p, rule=lambda m, t:
+        #     m.e_sell_no_ev[t] <= (1 - m.z_buy[t]) * capacity * m.dt
+        # )
+
         self.model.con_energy_sell_ub = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
             m.e_sell[t] <= (1 - m.z_buy[t]) * capacity * m.dt
         )
+        
 
         def con_energy_buy_f(m, t):
             e_buy = 0.0
@@ -793,9 +799,12 @@ class PortfolioOptimizationProblem:
 
         # Convert e_buy from J to kWh to match the price unit Eur/kWh
         if self.has_ev:
+            self.model.e_sell_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+            self.model.con_e_ev_sell = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: m.e_sell_ev[t] == m.p_ev_sell[t] * m.dt)
             self.model.sell_rev_def = pyo.Constraint(
                 self.model.time_index_p, rule=lambda m, t:
-                m.sell_rev[t] == sell_prices[t] * m.e_sell[t] + (sell_prices_ev[t] * m.p_ev_sell[t]))
+                m.sell_rev[t] == sell_prices[t] * (m.e_sell[t] - m.e_sell_ev[t]) + sell_prices_ev[t] * m.e_sell_ev[t]
+            )
         else:
             self.model.sell_rev_def = pyo.Constraint(
                 self.model.time_index_p, rule=lambda m, t:
