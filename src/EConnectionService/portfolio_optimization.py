@@ -168,7 +168,7 @@ class PortfolioOptimizationProblem:
         self.model.con_soc_ev_dep_low = pyo.Constraint(self.model.time_index_p, rule=departure_constraint_f_low)
 
         def soc_update_charge(model, t):
-            if (any(arr_ptu <= t <= dep_ptu for arr_ptu, dep_ptu in
+            if (any(arr_ptu <= t <= dep_ptu + 1 for arr_ptu, dep_ptu in
                     zip(arrival_ptus, departure_ptus))) and t > 0:
                 # m.soc[t + 1] == m.soc[t] + (m.ch_eff * m.p_ch[t] - 1 / m.dis_ch_eff * (m.p_bat_use[t] + m.p_bat_sell[t])) * m.dt
                 return model.soc_ev[t] == model.soc_ev[t-1] + (model.ch_eff_ev * model.p_ev[t-1] - 1 / model.ch_eff_ev * (model.p_ev_use[t-1] + model.p_ev_sell[t-1])) * model.dt
