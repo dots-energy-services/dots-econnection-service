@@ -655,24 +655,19 @@ class PortfolioOptimizationProblem:
 
     def create_energy_balance(self, asset_portfolio: dict):
         self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        # self.model.e_sell_no_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+        self.model.e_sell_no_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
+        self.model.e_prosumed = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
 
         capacity = 17.0  # TODO: remove magic number
         self.model.con_energy_buy_ub = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.e_buy[t] <= m.z_buy[t] * capacity * m.dt
+            m.e_buy[t] <= capacity * m.dt
         )
-
-        # self.model.con_energy_sell_no_ev_ub = pyo.Constraint(
-        #     self.model.time_index_p, rule=lambda m, t:
-        #     m.e_sell_no_ev[t] <= (1 - m.z_buy[t]) * capacity * m.dt
-        # )
 
         self.model.con_energy_sell_ub = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.e_sell[t] <= (1 - m.z_buy[t]) * capacity * m.dt
+            m.e_sell[t] <= capacity * m.dt
         )
         
 
@@ -695,17 +690,25 @@ class PortfolioOptimizationProblem:
 
         self.model.con_energy_buy = pyo.Constraint(self.model.time_index_p, rule=con_energy_buy_f)
 
-        def con_energy_sell_f(m, t):
-            e_sell = 0.0
+        def con_energy_sell_no_ev_f(m, t):
+            e_sell_no_ev = 0.0
             if 'PVInstallation' in asset_portfolio:
-                e_sell += m.p_pv_sell[t] * m.dt
+                e_sell_no_ev += m.p_pv_sell[t] * m.dt
             if 'Battery' in asset_portfolio:
-                e_sell += m.p_bat_sell[t] * m.dt
-            if 'EVChargingStation' in asset_portfolio:
-                e_sell += m.p_ev_sell[t] * m.dt
-            return m.e_sell[t] == e_sell
+                e_sell_no_ev += m.p_bat_sell[t] * m.dt
+            return m.e_sell_no_ev[t] == e_sell_no_ev
 
-        self.model.con_energy_sell = pyo.Constraint(self.model.time_index_p, rule=con_energy_sell_f)
+        self.model.con_energy_sell_no_ev = pyo.Constraint(self.model.time_index_p, rule=con_energy_sell_no_ev_f)
+        self.model.con_e_prosumed = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: m.e_prosumed[t] == m.e_buy[t] - m.e_sell[t])
+
+        if self.has_ev:
+            self.model.e_sell_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
+            self.model.con_e_ev_sell = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: m.e_sell_ev[t] == m.p_ev_sell[t] * m.dt)
+            self.model.con_sell_inc_ev = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: m.e_sell[t] == m.e_sell_no_ev[t] + m.e_sell_ev[t])
+            self.model.con_sell_ev_up = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: m.e_sell_no_ev[t] <= m.e_sell_ev[t])
+        else:
+            self.model.con_e_sell_no_ev = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: m.e_sell[t] == m.e_sell_no_ev[t])
+
 
     def get_first_value_from_component(self, name: str):
         component = self.model.find_component(name)
@@ -799,8 +802,6 @@ class PortfolioOptimizationProblem:
 
         # Convert e_buy from J to kWh to match the price unit Eur/kWh
         if self.has_ev:
-            self.model.e_sell_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-            self.model.con_e_ev_sell = pyo.Constraint(self.model.time_index_p, rule=lambda m, t: m.e_sell_ev[t] == m.p_ev_sell[t] * m.dt)
             self.model.sell_rev_def = pyo.Constraint(
                 self.model.time_index_p, rule=lambda m, t:
                 m.sell_rev[t] == sell_prices[t] * (m.e_sell[t] - m.e_sell_ev[t]) + sell_prices_ev[t] * m.e_sell_ev[t]
@@ -908,11 +909,11 @@ class PortfolioOptimizationProblem:
         self.model.static_bw_price_high = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_high)
         self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_power_kw)
         self.model.static_bw_costs = pyo.Var(time_index, within=pyo.NonNegativeReals, initialize=0)
-
+        (m.e_buy[t] + m.e_sell[t])
         self.model.con_bw_low = pyo.Constraint(
             time_index, rule=lambda m, t:
             # eur/kWh x kWh
-            m.static_bw_price_low * (- (m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
+            m.static_bw_price_low * (- (m.prosumed[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
         self.model.con_bw_high = pyo.Constraint(
             time_index, rule=lambda m, t:

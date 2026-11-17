@@ -279,6 +279,21 @@ class TestEmsOptimization(EmsTest):
             time_step = TimeStepInformation(i,96)
             # TODO: fix testcase logic seems to work
             ret_val = service.calculate_dispatch(edemand_param, date_time, time_step, esdl_id_to_test, energy_system)
+
+            prev_var_names = [
+                ('p_ev', 47), 
+                ('soc_ev', 48),
+                ('p_ev_use', 47),
+                ('p_ev_sell', 47),
+                ('z_ch_ev', 47),
+                ('z_dis_ch_ev', 47),
+                ('e_prosumed', 47),
+                ('e_buy', 47),
+                ('e_sell', 47)
+            ]
+            prev_values = service.optimization_problems["5c19dcff-b004-4644-99b9-f42d15a34f3a"].get_previous_values_from_solution(prev_var_names)
+            for value in prev_values.values():
+                self.assertFalse(all(val - 0.001 <= val <= val + 0.001 for val in value))
             time_step_2 = TimeStepInformation(i + 1,96)
             ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, time_step_2)
             self.assertGreater(ev_params.current_soc_kwh, prev_soc)
