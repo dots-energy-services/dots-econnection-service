@@ -39,7 +39,7 @@ class PortfolioOptimizationProblem:
         p_edemand_dict = self.it2dict(active_power)
         self.model.p_edemand = pyo.Param(self.model.time_index_p, within=pyo.Reals, initialize=p_edemand_dict)
 
-    def get_previous_values_from_solution(self, variable_index_mapping : list[tuple[str, int]]) -> dict[str, list[float]]:
+    def get_previous_values_from_solution(self, variable_index_mapping : list[tuple[str, int]]) -> dict[str, dict[int, float]]:
         var_dict: dict[str, dict[int, float]] = {name: {} for name, _ in variable_index_mapping}
         for name, index in variable_index_mapping:
             for i in range(1, index):
@@ -809,7 +809,7 @@ class PortfolioOptimizationProblem:
         else:
             self.model.sell_rev_def = pyo.Constraint(
                 self.model.time_index_p, rule=lambda m, t:
-                m.sell_rev[t] == sell_prices[t] * m.e_sell[t])
+                m.sell_rev[t] == sell_prices[t] * m.e_prosumed[t])
         self.model.total_sell_rev_def = pyo.Constraint(
             rule=lambda m: m.total_sell_rev == sum(m.sell_rev[t] for t in m.time_index_p))
 
@@ -836,11 +836,11 @@ class PortfolioOptimizationProblem:
         if self.has_hybrid_heat_pump:
             self.model.buy_costs_def = pyo.Constraint(
                 self.model.time_index_p, rule=lambda m, t:
-                m.buy_costs[t] == m.v_gass_m3[t] * gass_prices[t] + buy_prices[t] * m.e_buy[t])
+                m.buy_costs[t] == m.v_gass_m3[t] * gass_prices[t] + buy_prices[t] * m.e_prosumed[t])
         else:
             self.model.buy_costs_def = pyo.Constraint(
                             self.model.time_index_p, rule=lambda m, t:
-                            m.buy_costs[t] == buy_prices[t] * m.e_buy[t])
+                            m.buy_costs[t] == buy_prices[t] * m.e_prosumed[t])
 
         self.model.total_buy_costs_def = pyo.Constraint(
             rule=lambda m: m.total_buy_costs == sum(m.buy_costs[t] for t in m.time_index_p))
@@ -909,16 +909,10 @@ class PortfolioOptimizationProblem:
         self.model.static_bw_price_high = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_price_high)
         self.model.static_bw_power = pyo.Param(within=pyo.NonNegativeReals, initialize=static_bw_power_kw)
         self.model.static_bw_costs = pyo.Var(time_index, within=pyo.NonNegativeReals, initialize=0)
-        (m.e_buy[t] + m.e_sell[t])
         self.model.con_bw_low = pyo.Constraint(
             time_index, rule=lambda m, t:
             # eur/kWh x kWh
-            m.static_bw_price_low * (- (m.prosumed[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
-
-        self.model.con_bw_high = pyo.Constraint(
-            time_index, rule=lambda m, t:
-            # eur/kWh x kWh
-            m.static_bw_price_high * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
+            m.static_bw_price_low * ((m.e_buy[t] + m.e_sell[t]) - m.static_bw_power * m.dt) <= m.static_bw_costs[t])
 
         self.model.con_total_static_bw_costs = pyo.Constraint(
             rule=lambda m: m.total_static_bw_costs == sum(m.static_bw_costs[t] for t in time_index))
