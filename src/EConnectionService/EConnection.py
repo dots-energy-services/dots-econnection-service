@@ -771,9 +771,9 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         if description_dict['got_ems']:  # only connections with an ems have a contract
             energy_contract = description_dict['energy_contract']
             self.energy_contracts[esdl_id] = description_dict['energy_contract']
-            if energy_contract == 'dynamic':
+            if energy_contract == 'dynamic_contract':
                 self.dynamic_flat_prices[esdl_id] = description_dict['flat_price']
-            elif energy_contract == 'static':
+            elif energy_contract == 'fixed_contract':
                 self.static_prices[esdl_id] = description_dict['price']
             else:
                 raise ValueError(f'Detected contract type {energy_contract} for EMS {esdl_id} '
