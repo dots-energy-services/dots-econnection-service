@@ -163,7 +163,7 @@
           <port xsi:type="esdl:InPort" id="34aa570e-708b-4219-9239-6f9c295eca50" name="In" connectedTo="9a3fbb46-d46c-42b7-889f-4cb5f7fc72ba"/>
           <port xsi:type="esdl:OutPort" id="42412faa-0fa0-4ec5-9871-b123cea6c2a3" connectedTo="010fdc39-88e5-49ba-b8e7-ad874a514710"/>
         </asset>
-        <asset xsi:type="esdl:HybridHeatPump" id="4cb7db53-6130-4dae-8e39-eda2afc78fa5" name="hhp_Home1" assetType="air_water" gasHeaterThermalPower="18000.0" heatPumpThermalPower="8000.0" powerFactor="0.98">
+        <asset xsi:type="esdl:HybridHeatPump" id="4cb7db53-6130-4dae-8e39-eda2afc78fa5" name="hhp_Home1" assetType="air_water" gasHeaterThermalPower="18000.0" gasHeaterEfficiency="0.96" heatPumpThermalPower="8000.0" powerFactor="0.98">
           <port xsi:type="esdl:OutPort" id="9a3fbb46-d46c-42b7-889f-4cb5f7fc72ba" name="Out_sh_buffer_vrijstaande woning_1992_2005" connectedTo="34aa570e-708b-4219-9239-6f9c295eca50"/>
           <port xsi:type="esdl:OutPort" id="ba8d2699-ef91-4202-96c8-d729068648a5" connectedTo="feab5efd-b626-43c3-987d-db9a0512d373"/>
           <port xsi:type="esdl:OutPort" id="ab881ebc-e521-4042-baf7-2656bc48d064" connectedTo="c494b10b-3331-4d64-8b80-66f612d5a935"/>

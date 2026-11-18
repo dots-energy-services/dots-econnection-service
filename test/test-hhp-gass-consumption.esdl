@@ -163,7 +163,7 @@
           <port xsi:type="esdl:InPort" id="3279c564-b673-4985-aec6-1eb4b1a677e2" name="In" connectedTo="1175d571-f7fc-4389-b282-262b1e928b67"/>
           <port xsi:type="esdl:OutPort" id="30ca06ed-af41-454f-b231-a890fcccbe67" connectedTo="938be8b4-a99c-46e1-a2d4-ac262473f2dc"/>
         </asset>
-        <asset xsi:type="esdl:HybridHeatPump" id="37fe1992-2336-4584-bac3-009f539e0880" name="hhp_Home1" assetType="air_water" gasHeaterThermalPower="18000.0" heatPumpThermalPower="8000.0" powerFactor="0.98">
+        <asset xsi:type="esdl:HybridHeatPump" id="37fe1992-2336-4584-bac3-009f539e0880" name="hhp_Home1" assetType="air_water" gasHeaterThermalPower="18000.0" gasHeaterEfficiency="0.96" heatPumpThermalPower="8000.0" powerFactor="0.98">
           <port xsi:type="esdl:OutPort" id="1175d571-f7fc-4389-b282-262b1e928b67" name="Out_sh_buffer_vrijstaande woning_1992_2005" connectedTo="3279c564-b673-4985-aec6-1eb4b1a677e2"/>
           <port xsi:type="esdl:OutPort" id="7b01cc90-c92e-4579-a03c-5c0c4ea81c2a" connectedTo="d33c2981-da4c-4ac5-b367-8c4891a1fd98"/>
           <port xsi:type="esdl:OutPort" id="ff321926-a9f0-4dd4-93d3-a40f55bddea5" connectedTo="84d2cc99-282b-41c8-9c08-cd4ba221edc6"/>
@@ -220,7 +220,7 @@
           <port xsi:type="esdl:InPort" id="f693a3eb-a619-472a-9b2a-8c532921ec47" name="In" connectedTo="7e8f3020-42ba-498c-b278-1e47ebb2952e"/>
           <port xsi:type="esdl:OutPort" id="3c796e2d-7898-4f6b-acc8-e3f924065fce" connectedTo="5d795a11-5e68-4c0c-a532-0dc30d228569"/>
         </asset>
-        <asset xsi:type="esdl:HybridHeatPump" id="4a1a9042-ee6e-4f6d-8c5e-80dfee212d2e" name="hhp_Home2" assetType="air_water" gasHeaterThermalPower="18000.0" heatPumpThermalPower="8000.0" powerFactor="0.98">
+        <asset xsi:type="esdl:HybridHeatPump" id="4a1a9042-ee6e-4f6d-8c5e-80dfee212d2e" name="hhp_Home2" assetType="air_water" gasHeaterThermalPower="18000.0" gasHeaterEfficiency="0.96" heatPumpThermalPower="8000.0" powerFactor="0.98">
           <port xsi:type="esdl:OutPort" id="7e8f3020-42ba-498c-b278-1e47ebb2952e" name="Out_sh_buffer_vrijstaande woning_1992_2005" connectedTo="f693a3eb-a619-472a-9b2a-8c532921ec47"/>
           <port xsi:type="esdl:OutPort" id="59ddd25f-102e-4170-9acb-e189a4fb498e" connectedTo="831893bd-a7f7-4e56-af6a-a661abe70bd4"/>
           <port xsi:type="esdl:OutPort" id="54c79ac9-3b9f-4c77-b861-1b72b43a7fa2" connectedTo="fd95bdcf-90a5-414b-9909-c54816b71e23"/>

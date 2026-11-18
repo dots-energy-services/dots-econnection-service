@@ -8,7 +8,7 @@ from dots_infrastructure.EsdlProfileParsingClasses import ParsedDateTimeProfile,
 from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation, TimeRequestType
 from dots_infrastructure.HelicsFederateHelpers import HelicsSimulationExecutor
 from dots_infrastructure.Logger import LOGGER
-from esdl import DateTimeProfile, ElectricityDemand, ElectricityNetwork, HeatDemandTypeEnum, HeatPump, HeatingDemand, HybridHeatPump, OutPort, esdl, EnergySystem
+from esdl import DateTimeProfile, ElectricityDemand, ElectricityNetwork, HeatDemandTypeEnum, HeatPump, HeatingDemand, HybridHeatPump, OutPort, esdl, EnergySystem, WaterBuffer
 
 import json
 import numpy as np
@@ -242,9 +242,6 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                         asset_portfolio[asset_name] = {'esdl_object': asset, 'phases': self.get_phases_from_asset(asset)}
                         if asset_name == "HybridHeatPump":
                             self._store_dhw_profile_in_chache(asset)
-                        # # if type(asset).__name__ == "WaterBuffer":
-                        # #         if "hw_buffer" in asset.name:
-                        # #             self._store_dhw_profile_in_chache(asset)
                 if isinstance(asset, ElectricityNetwork):
                     for port in asset.port:
                         if isinstance(port, OutPort):
@@ -256,7 +253,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                                             e_demand_phases[i - 1] = True
 
             for asset in building.asset:
-                if type(asset).__name__ == "WaterBuffer":
+                if isinstance(asset, WaterBuffer):
                     if "hw_buffer" in asset.name:
                         self._store_dhw_profile_in_chache(asset)
 
@@ -270,7 +267,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         if dhw_demand is not None:
             dhw_profile = dhw_demand.port[1].profile[0]
             profile = ParsedTimeSeriesProfile(dhw_profile)
-            if type(asset).__name__ == "HybridHeatPump":
+            if isinstance(asset, HybridHeatPump):
                 self.hw_heating_demand_profiles[asset.id] = profile
             else:
                 heat_pump = next(
