@@ -47,3 +47,4 @@ Calculate the dispatch of of all assets in the portfolio. It does so by 1) Creat
 |-----------------|------------------------|
 |[emservice](https://energytransition.github.io/#router/doc-content/687474703a2f2f7777772e746e6f2e6e6c2f6573646c/EConnection.html)|Details on the EConnection esdl type|
 |[modeling](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4992392&adobe_mc=MCMID%3D91243400954555169556066193574155036964%7CMCORGID%3D4D6368F454EC41940A4C98A6%2540AdobeOrg%7CTS%3D1745930123)|Details on the modeling of the energy management system|
+|[TNO 2022 P10336](https://publications.tno.nl/publication/34639576/DVlZDB/TNO-2022-P10336.pdf)|Details on building thermal model assumptions and empirical parameterization adopted in this implementation|
