@@ -8,7 +8,7 @@ from dots_infrastructure.EsdlProfileParsingClasses import ParsedDateTimeProfile,
 from dots_infrastructure.DataClasses import EsdlId, HelicsCalculationInformation, PublicationDescription, SubscriptionDescription, TimeStepInformation, TimeRequestType
 from dots_infrastructure.HelicsFederateHelpers import HelicsSimulationExecutor
 from dots_infrastructure.Logger import LOGGER
-from esdl import DateTimeProfile, ElectricityDemand, ElectricityNetwork, HeatDemandTypeEnum, HeatPump, HeatingDemand, HybridHeatPump, OutPort, esdl, EnergySystem
+from esdl import DateTimeProfile, ElectricityDemand, ElectricityNetwork, HeatDemandTypeEnum, HeatPump, HeatingDemand, HybridHeatPump, OutPort, esdl, EnergySystem, WaterBuffer
 
 import json
 import numpy as np
@@ -16,7 +16,7 @@ from typing import Optional, List
 from EConnectionService.esdl_entity_parameter_parser import EsdlEntityParameterParser
 from EConnectionService.portfolio_optimization import PortfolioOptimizationProblem
 from dots_infrastructure.CalculationServiceHelperFunctions import get_single_param_with_name
-
+import math
 
 class CalculationServiceEConnection(HelicsSimulationExecutor):
 
@@ -240,7 +240,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                         raise ValueError(f'There was already a {asset_name} connected to Econnection {econnection.id}')
                     else:
                         asset_portfolio[asset_name] = {'esdl_object': asset, 'phases': self.get_phases_from_asset(asset)}
-                        if asset_name == "HeatPump" or asset_name == "HybridHeatPump":
+                        if asset_name == "HybridHeatPump":
                             self._store_dhw_profile_in_chache(asset)
                 if isinstance(asset, ElectricityNetwork):
                     for port in asset.port:
@@ -251,6 +251,12 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                                     for i in range(1, 4):
                                         if f'ph{i}' in asset.name.lower():
                                             e_demand_phases[i - 1] = True
+
+            for asset in building.asset:
+                if isinstance(asset, WaterBuffer):
+                    if "hw_buffer" in asset.name:
+                        self._store_dhw_profile_in_chache(asset)
+
         if e_demand is not None:
             asset_portfolio[type(e_demand).__name__] = {'esdl_object': e_demand, 'phases': e_demand_phases}
 
@@ -261,7 +267,16 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         if dhw_demand is not None:
             dhw_profile = dhw_demand.port[1].profile[0]
             profile = ParsedTimeSeriesProfile(dhw_profile)
-            self.hw_heating_demand_profiles[asset.id] = profile
+            if isinstance(asset, HybridHeatPump):
+                self.hw_heating_demand_profiles[asset.id] = profile
+            else:
+                heat_pump = next(
+                    connected_to.eContainer()
+                    for port in asset.port
+                    for connected_to in port.connectedTo
+                    if isinstance(connected_to.eContainer(), esdl.HeatPump))
+                self.hw_heating_demand_profiles[heat_pump.id] = profile
+
 
     @staticmethod
     def get_phases_from_asset(asset: esdl.EnergyAsset) -> list:
