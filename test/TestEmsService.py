@@ -119,30 +119,30 @@ class TestEmsOptimization(EmsTest):
         service = self.init_e_connection_service(energy_system)
 
         edemand_param = self.get_default_set_params()
-        edemand_param["house_temperatures"] = [290.85, 278.3497627218783]
+        edemand_param["house_temperatures"] = [292.85, 278.3497627218783]
         edemand_param["buffer_temperature"] = 298.15
         edemand_param["congestion_signal"] = 2*1.0e-6
         edemand_param["potential_active_power"] = [0.0] * 48
 
         # Execute
-        q_hot_water = 0.0082480710300739 * 4183/3.6e6 * (328.15 - 288.15)
-        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,1, 0, 15, 0), TimeStepInformation(18,96), "1412f71f-a9d2-4c66-a834-385cf91c3767", energy_system)
+        q_hot_water = 6.597931790933333e-05 * 4183/3.6e6 * (328.15 - 288.15)
+        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,1, 1, 45, 0), TimeStepInformation(24,96), "1412f71f-a9d2-4c66-a834-385cf91c3767", energy_system)
         gass_consumption_datapoint : SimulaitonDataPoint = next(dp for dp in service.influx_connector.data_points if dp.output_name == "hhp_gass_consumption")
         self.assertGreater(gass_consumption_datapoint.value, q_hot_water / 10 )
 
     def test_given_hybrid_heat_pump_is_present_then_gass_consumption_for_hot_water_is_calculated(self):
-            energy_system = self.load_esdl_file(str(Path(__file__).parent / 'test-hhp-gass-consumption.esdl'))
-            service = self.init_e_connection_service(energy_system)
+        energy_system = self.load_esdl_file(str(Path(__file__).parent / 'test-hhp-gass-consumption.esdl'))
+        service = self.init_e_connection_service(energy_system)
     
-            edemand_param = self.get_default_set_params()
-            edemand_param["house_temperatures"] = [290.85, 278.3497627218783]
-            edemand_param["buffer_temperature"] = 298.15
-            edemand_param["congestion_signal"] = 0.0
+        edemand_param = self.get_default_set_params()
+        edemand_param["house_temperatures"] = [292.85, 278.3497627218783]
+        edemand_param["buffer_temperature"] = 298.15
+        edemand_param["congestion_signal"] = 0.0
     
-            # Execute
-            ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,1, 0, 0, 0) + timedelta(seconds=18*900), TimeStepInformation(18,96), "1412f71f-a9d2-4c66-a834-385cf91c3767", energy_system)
-            gass_consumption_datapoint : SimulaitonDataPoint = next(dp for dp in service.influx_connector.data_points if dp.output_name == "hhp_gass_consumption")
-            self.assertGreater(gass_consumption_datapoint.value, 0.0)
+        # Execute
+        ret_val = service.calculate_dispatch(edemand_param, datetime(2024,1,1, 1, 45, 0), TimeStepInformation(24,96), "1412f71f-a9d2-4c66-a834-385cf91c3767", energy_system)
+        gass_consumption_datapoint : SimulaitonDataPoint = next(dp for dp in service.influx_connector.data_points if dp.output_name == "hhp_gass_consumption")
+        self.assertGreater(gass_consumption_datapoint.value, 0.0)
 
     def test_different_assets(self):
         test_examples = [
@@ -239,7 +239,7 @@ class TestEmsOptimization(EmsTest):
         last_simulated_time = START_DATE_TIME
 
         # Execute
-        for i in range(1,4):
+        for i in range(0,4):
 
             time_step = TimeStepInformation(i,96)
             last_simulated_time = START_DATE_TIME + timedelta(seconds=i*900)
@@ -271,8 +271,8 @@ class TestEmsOptimization(EmsTest):
         ev_charging_station = service.asset_portfolios[esdl_id_to_test]['EVChargingStation']['esdl_object']
         initial_soc = 0.8*75 - 4.58
         prev_soc = initial_soc
-        start_date_time = datetime(2024,1,14, 0, 15, 0)
-        for i in range(1, n_time_steps_possible_charge + 1):
+        start_date_time = datetime(2024,1,14, 0, 0, 0)
+        for i in range(0, n_time_steps_possible_charge):
             time_steps_to_charge_remaining = n_time_steps_possible_charge - i
             edemand_param['day_ahead_prices'] = [1.23 for _ in range(time_steps_to_charge_remaining)] + [800.0 for _ in range(48 - time_steps_to_charge_remaining)]
             date_time = start_date_time + timedelta(seconds=i*900)
@@ -280,7 +280,7 @@ class TestEmsOptimization(EmsTest):
             # TODO: fix testcase logic seems to work
             ret_val = service.calculate_dispatch(edemand_param, date_time, time_step, esdl_id_to_test, energy_system)
             time_step_2 = TimeStepInformation(i + 1,96)
-            ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, time_step_2)
+            ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, date_time, SIMULATION_DURATION_IN_SECONDS, 900, time_step_2)
             self.assertGreaterEqual(ev_params.current_soc_kwh, prev_soc)
             prev_soc = ev_params.current_soc_kwh
 
