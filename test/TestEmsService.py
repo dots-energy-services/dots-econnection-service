@@ -66,7 +66,7 @@ class EmsTest(unittest.TestCase):
         # heatpump
         edemand_param["dhw_temperature"] = 328.1499987884123
         edemand_param["buffer_temperature"] = 319.72477588114043
-        edemand_param["house_temperatures"] = [291.85009999999994, 288.3497627218783]
+        edemand_param["house_temperatures"] = [292.25009999999994, 288.3497627218783]
         return edemand_param
 
 class TestEmsHelperFunctions(EmsTest):
@@ -235,7 +235,7 @@ class TestEmsOptimization(EmsTest):
         energy_system = self.load_esdl_file(str(Path(__file__).parent /'test-ev-model.esdl'))
         service = self.init_e_connection_service(energy_system)
         edemand_param = self.get_default_set_params()
-        esdl_id_to_test = "5c19dcff-b004-4644-99b9-f42d15a34f3a"
+        esdl_id_to_test = "1412f71f-a9d2-4c66-a834-385cf91c3767"
         last_simulated_time = START_DATE_TIME
 
         # Execute
@@ -266,7 +266,7 @@ class TestEmsOptimization(EmsTest):
 
         max_to_charge = 75 - (0.8 * 75 - 4.58)
         n_time_steps_possible_charge = int(math.floor(max_to_charge / (0.25*11)))
-        esdl_id_to_test = "5c19dcff-b004-4644-99b9-f42d15a34f3a"
+        esdl_id_to_test = "1412f71f-a9d2-4c66-a834-385cf91c3767"
         
         ev_charging_station = service.asset_portfolios[esdl_id_to_test]['EVChargingStation']['esdl_object']
         initial_soc = 0.8*75 - 4.58

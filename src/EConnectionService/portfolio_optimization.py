@@ -783,7 +783,7 @@ class PortfolioOptimizationProblem:
         self.model.total_sell_rev = pyo.Var(within=pyo.Reals, initialize=0)
         self.model.sell_rev = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
         sell_prices_ev = []
-        if energy_contract == 'dynamic':
+        if energy_contract == 'dynamic_contract':
             if is_feed_in_tariff:
                 sell_prices = da_prices
                 sell_prices_ev = [price + dynamic_flat_price for price in da_prices]
@@ -827,7 +827,7 @@ class PortfolioOptimizationProblem:
         self.model.total_buy_costs = pyo.Var(within=pyo.Reals, initialize=0)
         self.model.buy_costs = pyo.Var(self.model.time_index_p, within=pyo.Reals, initialize=0)
         # Determine costs from buying energy
-        if energy_contract == 'dynamic':
+        if energy_contract == 'dynamic_contract':
             buy_prices = [price + dynamic_flat_price for price in da_prices]
         else:
             buy_prices = len(self.model.time_index_p) * [static_price]
