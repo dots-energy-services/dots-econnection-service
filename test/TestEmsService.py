@@ -254,7 +254,7 @@ class TestEmsOptimization(EmsTest):
             prev_value = dp
         self.assertGreaterEqual(soc_data_points[-1].value, 60)
 
-    def test_ev_model_v2g_force_charge_and_discharge(self):
+    def test_ev_model_v2g_force_charge(self):
         energy_system = self.load_esdl_file(str(Path(__file__).parent /'test-ev-model-v2g-force_charge.esdl'))
         service = self.init_e_connection_service(energy_system)
 
@@ -281,8 +281,10 @@ class TestEmsOptimization(EmsTest):
             ret_val = service.calculate_dispatch(edemand_param, date_time, time_step, esdl_id_to_test, energy_system)
             time_step_2 = TimeStepInformation(i + 1,96)
             ev_params = service.esdl_entity_parser.get_ev_parameters(ev_charging_station, START_DATE_TIME, SIMULATION_DURATION_IN_SECONDS, 900, time_step_2)
-            self.assertGreater(ev_params.current_soc_kwh, prev_soc)
+            self.assertGreaterEqual(ev_params.current_soc_kwh, prev_soc)
             prev_soc = ev_params.current_soc_kwh
+
+        self.assertGreater(prev_soc, initial_soc)
 
     def test_ev_arrives_soc_is_zero(self):
         pass

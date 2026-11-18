@@ -711,8 +711,8 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         self.is_variable_tariff = False
         self.is_variable_peak_tariff = False
         self.congestion_management_active = False
-        self.is_feed_in_tariff = False
-        self.feed_in_price = None
+        self.is_feed_in_tariff = True
+        self.feed_in_price = 0.05
         for measure in measures.measure:
             if measure.name == 'static_bandwidth_tariff':
                 LOGGER.info("Static Bandwidth tariff detected")
