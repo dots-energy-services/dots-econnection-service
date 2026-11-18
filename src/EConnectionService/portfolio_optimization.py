@@ -229,9 +229,6 @@ class PortfolioOptimizationProblem:
         soil_temperature_dict = self.it2dict(soil_temperature)
         solar_irradiance_dict = self.it2dict(solar_irradiance)
 
-        air_temperature_dict = {k: v + 273.15 for k, v in air_temperature_dict.items()}
-        soil_temperature_dict = {k: v + 273.15 for k, v in soil_temperature_dict.items()}
-
         # Parameters
         # Weather
         self.model.T_air = pyo.Param(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=air_temperature_dict)
@@ -451,9 +448,6 @@ class PortfolioOptimizationProblem:
         air_temperature_dict = self.it2dict(air_temperature)
         soil_temperature_dict = self.it2dict(soil_temperature)
         solar_irradiance_dict = self.it2dict(solar_irradiance)
-
-        air_temperature_dict = {k: v + 273.15 for k, v in air_temperature_dict.items()}
-        soil_temperature_dict = {k: v + 273.15 for k, v in soil_temperature_dict.items()}
 
         # Parameters
         # Weather
