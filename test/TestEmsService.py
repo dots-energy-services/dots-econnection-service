@@ -254,6 +254,30 @@ class TestEmsOptimization(EmsTest):
             prev_value = dp
         self.assertGreaterEqual(soc_data_points[-1].value, 60)
 
+    def test_given_consecutive_ev_sessions_one_is_ignored(self):
+        # Arrange
+        energy_system = self.load_esdl_file(str(Path(__file__).parent /'test-ev-model-consecutive-sessions-ignored.esdl'))
+        service = self.init_e_connection_service(energy_system)
+        edemand_param = self.get_default_set_params()
+        esdl_id_to_test = "1412f71f-a9d2-4c66-a834-385cf91c3767"
+        last_simulated_time = START_DATE_TIME
+    
+        # Execute
+        for i in range(0,12):
+    
+            time_step = TimeStepInformation(i,96)
+            last_simulated_time = START_DATE_TIME + timedelta(seconds=i*900)
+            ret_val = service.calculate_dispatch(edemand_param, last_simulated_time, time_step, esdl_id_to_test, energy_system)
+    
+        # Assert
+        soc_data_points : SimulaitonDataPoint = [dp for dp in service.influx_connector.data_points if dp.output_name == "soc_ev"]
+        for dp in soc_data_points[0:4]:
+            self.assertGreater(dp.value, 0.0 )
+        for dp in soc_data_points[4:6]:
+            self.assertEqual(dp.value, 0.0 )
+        for dp in soc_data_points[6:]:
+            self.assertGreater(dp.value, 0.0 )
+
     def test_given_mobility_demand_to_much_for_time_frame_session_is_ignored(self):
         # Arrange
         energy_system = self.load_esdl_file(str(Path(__file__).parent /'test-ev-model-to-much-charge.esdl'))

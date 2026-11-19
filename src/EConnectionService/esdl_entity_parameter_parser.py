@@ -296,7 +296,7 @@ class EsdlEntityParameterParser:
                 ptu += 1
                 current_datetime = current_datetime + timedelta(seconds=time_step_in_seconds)
 
-
+            self._filter_out_consecutive_loading_sessions(arrival_ptus, departure_ptus)
 
             self._ev_cache[key] = EVParameters(
                 arrival_ptus=arrival_ptus,
@@ -317,6 +317,20 @@ class EsdlEntityParameterParser:
             ev_params.current_soc_kwh = 0
             ev_params.min_soc_kwh = 0
         return ev_params
+
+    def _filter_out_consecutive_loading_sessions(self, arrival_ptus, departure_ptus):
+        dep_ptus = list(departure_ptus.keys())
+        arr_ptus = list(arrival_ptus.keys())
+        if len(arr_ptus) > 1 and len(dep_ptus) > 1:
+            arr_ptus_to_iterate = arr_ptus[1:]
+            dep_ptus_to_iterate = dep_ptus[1:]
+            prev_dep_ptu = dep_ptus[0]
+            for arr_ptu, dep_ptu in zip(arr_ptus_to_iterate, dep_ptus_to_iterate):
+                if arr_ptu - prev_dep_ptu <= 2:
+                    arrival_ptus.pop(arr_ptu)
+                    departure_ptus.pop(dep_ptu)
+                else:
+                    prev_dep_ptu = dep_ptu
 
     def set_soc_ev(self, ev_charginstation : esdl.EVChargingStation, soc_ev : float):
         self._ev_cache[ev_charginstation.id].current_soc_kwh = soc_ev
