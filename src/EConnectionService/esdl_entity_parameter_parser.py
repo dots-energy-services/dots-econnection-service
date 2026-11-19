@@ -284,9 +284,19 @@ class EsdlEntityParameterParser:
                 if profile_elem_arr is not None:
                     arrival_ptus[ptu] = 0.8 * ev_d['capacity_kwh'] - profile_elem_arr.value
                 if profile_elem_dep is not None and len(departure_ptus) == len(arrival_ptus) - 1:
-                    departure_ptus[ptu] = 0.8 * ev_d['capacity_kwh']
+                    last_key = next(reversed(arrival_ptus), None)
+                    arrival_date = simulation_start_time + timedelta(seconds = last_key * time_step_in_seconds)
+                    departure_date = current_datetime + timedelta(seconds=time_step_in_seconds)
+                    time_delta_dep_arr = departure_date - arrival_date
+                    max_to_charge_in_time = (ev.power * 0.001 * 1/3600) * time_delta_dep_arr.seconds * ev_d['efficiency']
+                    if max_to_charge_in_time > profile_elem_dep.value:
+                        departure_ptus[ptu] = 0.8 * ev_d['capacity_kwh']
+                    else:
+                        arrival_ptus.pop(last_key)
                 ptu += 1
                 current_datetime = current_datetime + timedelta(seconds=time_step_in_seconds)
+
+
 
             self._ev_cache[key] = EVParameters(
                 arrival_ptus=arrival_ptus,
