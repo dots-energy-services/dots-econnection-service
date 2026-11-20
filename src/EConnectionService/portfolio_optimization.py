@@ -165,9 +165,8 @@ class PortfolioOptimizationProblem:
             else:
                 return pyo.Constraint.Skip
 
-        self.model.con_soc_hor_ev = pyo.Constraint(
-            rule=lambda m:
-            m.soc_ev[m.time_index_soc.last()] >= ev_params.min_dep_soc_kwh * availability_ev[m.time_index_soc.last()]
+        self.model.con_soc_hor_ev = pyo.Constraint(rule=lambda m:
+            m.soc_ev[m.time_index_soc.last()] >= ev_params.min_dep_soc_kwh * m.availability_ev[m.time_index_soc.last()]
         )
 
         self.model.con_soc_ev_dep_low = pyo.Constraint(self.model.time_index_p, rule=departure_constraint_f_low)
