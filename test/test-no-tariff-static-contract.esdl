@@ -127,7 +127,7 @@
       </asset>
       <asset xsi:type="esdl:Building" name="Home1" assetType="vrijstaande woning_1992_2005" floorArea="153.28" buildingYear="1964" surfaceArea="89" numberOfFloors="2" originalIdInSource="1_1" id="0d384bf8-0fd2-469b-8cf6-fc05f22e098f">
         <geometry xsi:type="esdl:Point" lon="-8.52563926145606" CRS="WGS84" lat="32.97698908787323"/>
-        <asset xsi:type="esdl:EConnection" owner="aggregator_1" capacity="5000.0" name="ConnectionHome1" originalIdInSource="1_1" id="5c19dcff-b004-4644-99b9-f42d15a34f3a" description="{&quot;got_ems&quot;: true, &quot;energy_contract&quot;: &quot;static&quot;, &quot;price&quot;: 0.25}">
+        <asset xsi:type="esdl:EConnection" owner="aggregator_1" capacity="5000.0" name="ConnectionHome1" originalIdInSource="1_1" id="5c19dcff-b004-4644-99b9-f42d15a34f3a" description="{&quot;got_ems&quot;: true, &quot;energy_contract&quot;: &quot;fixed_contract&quot;, &quot;price&quot;: 0.25}">
           <port xsi:type="esdl:InPort" id="14240bd0-07eb-44a2-97ca-0088d8b4fa92" name="In" connectedTo="7134c518-3333-4dd5-9e75-318789a36f6f"/>
           <port xsi:type="esdl:OutPort" name="OutPh1" id="7d7dc2f5-3d43-4a97-b203-9b6876a07dde" connectedTo="05f04a39-15bb-44f9-b263-f0bdab53477a"/>
           <port xsi:type="esdl:OutPort" name="OutPh2" id="d808123d-0e2e-4715-81ad-de8f4fe667b7" connectedTo="f4563fd2-ac87-4284-9bbb-fccd81eceb69"/>
@@ -181,7 +181,7 @@
       </asset>
       <asset xsi:type="esdl:Building" name="Home2" assetType="vrijstaande woning_1992_2005" originalIdInSource="2_1" floorArea="153.28" buildingYear="1964" surfaceArea="89" numberOfFloors="2" id="f28d7be1-1f30-4529-88e1-2465d6a2bd1b">
         <geometry xsi:type="esdl:Point" lon="-8.544905094617002" CRS="WGS84" lat="32.96486700379329"/>
-        <asset xsi:type="esdl:EConnection" owner="aggregator_2" surfaceArea="89" name="ConnectionHome2" originalIdInSource="2_1" id="1412f71f-a9d2-4c66-a834-385cf91c3767" description="{&quot;got_ems&quot;: true, &quot;energy_contract&quot;: &quot;static&quot;, &quot;price&quot;: 0.25}">
+        <asset xsi:type="esdl:EConnection" owner="aggregator_2" surfaceArea="89" name="ConnectionHome2" originalIdInSource="2_1" id="1412f71f-a9d2-4c66-a834-385cf91c3767" description="{&quot;got_ems&quot;: true, &quot;energy_contract&quot;: &quot;fixed_contract&quot;, &quot;price&quot;: 0.25}">
           <port xsi:type="esdl:InPort" id="b5ff6f01-1271-493b-8be6-58c1aee30cb5" name="In" connectedTo="64209653-cfe0-449d-ad11-7872c8db3a29"/>
           <port xsi:type="esdl:OutPort" name="OutPh1" id="b400edd0-1d39-4c9b-aca1-9f6b01a9342a" connectedTo="8af45acc-0bfa-45aa-98ef-a436301d3ca9"/>
           <port xsi:type="esdl:OutPort" name="OutPh2" id="746f89bc-4da9-40d0-bd3b-95c715badc7a" connectedTo="bb995f63-cefc-4f99-8a40-1f4a679e0687"/>
@@ -229,7 +229,7 @@
           <port xsi:type="esdl:OutPort" id="bc57d2a2-7cbc-4afa-9009-61553699ba5d" name="Out_sh_buffer_vrijstaande woning_1992_2005" connectedTo="4fe78a37-0a7e-4c12-bb48-dce34a538401"/>
           <port xsi:type="esdl:OutPort" id="d98c49f7-6eaf-4ea4-b3c3-10fa59febb35" connectedTo="1744b440-002c-4dc6-9750-1dab9e451822"/>
         </asset>
-        <asset xsi:type="esdl:EVChargingStation" id="4785f5ae-950a-4e15-a0cc-7d6f6073ebb2" name="chargingstation_Home2" description="{&quot;min_charge_rate_kwh&quot;: 1.4, &quot;min_soc_percentage_v2g&quot;: 0.3, &quot;efficiency&quot;: 0.95, &quot;capacity_kwh&quot;: 75.0}" assetType="privateEV" power="11000.0" powerFactor="0.95">
+        <asset xsi:type="esdl:EVChargingStation" id="4785f5ae-950a-4e15-a0cc-7d6f6073ebb2" name="chargingstation_Home2" description="{&quot;min_charge_rate_kw&quot;: 1.4, &quot;min_soc_percentage_v2g&quot;: 0.3, &quot;efficiency&quot;: 0.95, &quot;capacity_kwh&quot;: 75.0}" assetType="privateEV" power="11000.0" powerFactor="0.95">
           <port xsi:type="esdl:InPort" id="f015b67d-b016-4fb2-86eb-c7a0a2d8e954" connectedTo="22d9d24e-df5a-47f9-99e1-1b3096b6033f"/>
           <port xsi:type="esdl:InPort" id="d0725b4b-5bc3-43cd-b4f0-a5052a4bb0bf" connectedTo="6ea5b22f-18bc-4035-a3be-277f5da38928"/>
           <port xsi:type="esdl:InPort" id="2a1ab3c4-1dcb-4a61-a0ba-e36931d98120" connectedTo="09a0447a-2052-4045-8aa9-79bb37a85de8"/>
