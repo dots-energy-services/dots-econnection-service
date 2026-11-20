@@ -92,14 +92,14 @@ class PortfolioOptimizationProblem:
 
         # Arrays
         # Create availability list
-        number_of_ptus = len(self.model.time_index_p) + 1
+        number_of_ptus = len(self.model.time_index_soc)
         availability_ev = number_of_ptus * [0]
         for arrival_ptu, departure_ptu in zip(arrival_ptus, departure_ptus):
             for ptu in range(max(0, arrival_ptu), max(0, min(departure_ptu + 1, number_of_ptus)) ):
                 availability_ev[ptu] = 1
 
-        self.model.availability_ev = pyo.Param(self.model.time_index_p, within=pyo.Binary,
-                                               initialize=self.it2dict(availability_ev[:-1]))
+        self.model.availability_ev = pyo.Param(self.model.time_index_soc, within=pyo.Binary,
+                                               initialize=self.it2dict(availability_ev))
 
         # Variables
         self.model.soc_ev = pyo.Var(self.model.time_index_soc, within=pyo.NonNegativeReals,
@@ -164,6 +164,11 @@ class PortfolioOptimizationProblem:
                 return model.soc_ev[t+1] >= departure_ptus_dict[t]
             else:
                 return pyo.Constraint.Skip
+
+        self.model.con_soc_hor_ev = pyo.Constraint(
+            rule=lambda m:
+            m.soc_ev[m.time_index_soc.last()] >= ev_params.min_dep_soc_kwh * availability_ev[m.time_index_soc.last()]
+        )
 
         self.model.con_soc_ev_dep_low = pyo.Constraint(self.model.time_index_p, rule=departure_constraint_f_low)
 
@@ -665,11 +670,6 @@ class PortfolioOptimizationProblem:
             self.model.time_index_p, rule=lambda m, t:
             m.e_buy[t] <= m.z_buy[t] * capacity * m.dt
         )
-
-        # self.model.con_energy_sell_no_ev_ub = pyo.Constraint(
-        #     self.model.time_index_p, rule=lambda m, t:
-        #     m.e_sell_no_ev[t] <= (1 - m.z_buy[t]) * capacity * m.dt
-        # )
 
         self.model.con_energy_sell_ub = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:

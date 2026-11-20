@@ -665,10 +665,10 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
     def get_power_value_ev_at_index(self, problem : PortfolioOptimizationProblem, index : int):
         p_ch_w = problem.get_value_from_component_at_time_index('p_ev', index) * 1000
-        p_bat_use_w = problem.get_value_from_component_at_time_index('p_ev_use', index) * 1000
-        p_bat_sell_w = problem.get_value_from_component_at_time_index('p_ev_sell', index) * 1000
+        p_ev_use = problem.get_value_from_component_at_time_index('p_ev_use', index) * 1000
+        p_ev_sell = problem.get_value_from_component_at_time_index('p_ev_sell', index) * 1000
         
-        p_ev = p_ch_w - (p_bat_use_w + p_bat_sell_w)
+        p_ev = p_ch_w - (p_ev_use + p_ev_sell)
         return p_ev
 
     def get_power_value_pv_at_index(self, problem : PortfolioOptimizationProblem, index : int):

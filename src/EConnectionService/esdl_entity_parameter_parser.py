@@ -68,6 +68,7 @@ class EVParameters:
     current_soc_kwh : float
     min_soc_kwh : float
     min_power_kw : float
+    min_dep_soc_kwh : float
 
 @dataclass
 class BatteryParameters:
@@ -278,6 +279,7 @@ class EsdlEntityParameterParser:
             end_date_time = simulation_start_time + timedelta(seconds = simulation_duration_in_seconds)
             ev_d = json.loads(ev.description)
             ptu = 1
+            min_dep_soc_kwh = 0.8 * ev_d['capacity_kwh']
             while current_datetime <= end_date_time:
                 profile_elem_arr = next((elem for elem in datetime_profile.element if current_datetime <= elem.from_ < current_datetime + timedelta(seconds=time_step_in_seconds) and elem.from_ >= simulation_start_time and elem.to <= end_date_time), None)
                 profile_elem_dep = next((elem for elem in datetime_profile.element if current_datetime <= elem.to < current_datetime + timedelta(seconds=time_step_in_seconds) and elem.to <= end_date_time and elem.from_ >= simulation_start_time), None)
@@ -290,7 +292,7 @@ class EsdlEntityParameterParser:
                     time_delta_dep_arr = departure_date - arrival_date
                     max_to_charge_in_time = (ev.power * 0.001 * 1/3600) * time_delta_dep_arr.seconds * ev_d['efficiency']
                     if max_to_charge_in_time > profile_elem_dep.value:
-                        departure_ptus[ptu] = 0.8 * ev_d['capacity_kwh']
+                        departure_ptus[ptu] = min_dep_soc_kwh
                     else:
                         arrival_ptus.pop(last_key)
                 ptu += 1
@@ -306,7 +308,8 @@ class EsdlEntityParameterParser:
                 efficiency = ev_d['efficiency'],
                 current_soc_kwh=0,
                 min_soc_kwh=ev_d['min_soc_percentage_v2g'] * ev_d['capacity_kwh'],
-                min_power_kw=ev_d['min_charge_rate_kw']
+                min_power_kw=ev_d['min_charge_rate_kw'],
+                min_dep_soc_kwh=min_dep_soc_kwh
             )
 
         ev_params = self._ev_cache[key]
