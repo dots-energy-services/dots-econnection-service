@@ -217,19 +217,19 @@ class PortfolioOptimizationProblem:
         self.model.p_ch = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.p_bat_use = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.p_bat_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        self.model.z_ch_ev = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
+        self.model.z_ch_batt = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
         self.model.soc = pyo.Var(self.model.time_index_soc, within=pyo.NonNegativeReals, initialize=self.model.init_soc)
 
         # When charging you lose depending on your charge efficiency
         self.model.con_bat_ch_limit = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-            m.ch_eff * m.p_ch[t] <= m.z_ch_ev[t] * m.max_ch_rate
+            m.ch_eff * m.p_ch[t] <= m.z_ch_batt[t] * m.max_ch_rate
         )
 
         # When discharching you want to discharge such that m.p_bat_use[t] + m.p_bat_sell[t] make up the exact amount
         self.model.con_bat_dch_limit = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
-             1 / m.dis_ch_eff * (m.p_bat_use[t] + m.p_bat_sell[t]) <= (1 - m.z_ch_ev[t]) * m.max_dis_ch_rate
+             1 / m.dis_ch_eff * (m.p_bat_use[t] + m.p_bat_sell[t]) <= (1 - m.z_ch_batt[t]) * m.max_dis_ch_rate
         )
 
         self.model.con_soc_min = pyo.Constraint(
