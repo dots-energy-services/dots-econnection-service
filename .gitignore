@@ -160,3 +160,4 @@ cython_debug/
 .idea/
 *.mps
 venv2/
+Helics-3.7.1-msvc2026-win64/

@@ -491,7 +491,6 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
         to_date = simulation_time + timedelta(seconds=self.ems_time_step_seconds * self.optimization_horizon)
         dhw_profile_slice = profile.get_data_in_timeseries_format(from_date, to_date, self.ems_time_step_seconds)
 
-        dhw_profile_slice = [round(value, self.round_decimals) for value in dhw_profile_slice]
         return dhw_profile_slice
 
     def get_hot_water_demand_profile(self, heat_pump : HybridHeatPump | HeatPump) -> HeatingDemand:
