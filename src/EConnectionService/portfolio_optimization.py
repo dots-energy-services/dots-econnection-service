@@ -27,9 +27,13 @@ class PortfolioOptimizationProblem:
         self.has_ev = False
 
     def create_time(self, time_params: dict):
+        amount_of_binary_time_steps = 6
         self.model.time_index_p = pyo.RangeSet(0, time_params['n_steps'] - 1)
         self.model.time_index_p1 = pyo.RangeSet(0, 0)
         self.model.time_index_soc = pyo.RangeSet(0, time_params['n_steps'])
+        self.model.time_index_bin = pyo.RangeSet(0, amount_of_binary_time_steps - 1)
+        self.model.time_index_no_bin = pyo.RangeSet(amount_of_binary_time_steps, time_params['n_steps'] - 1)
+        self.model.time_index_no_bin_soc = pyo.RangeSet(amount_of_binary_time_steps, time_params['n_steps'])
         self.model.dt = pyo.Param(initialize=time_params['dt'] / 3600)
         self.model.time_step_nr = pyo.Param(initialize=time_params['time_step_nr'])
 
@@ -107,9 +111,8 @@ class PortfolioOptimizationProblem:
         self.model.p_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=previous_values['p_ev'])
         self.model.p_ev_use = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=previous_values['p_ev_use'])
         self.model.p_ev_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=previous_values['p_ev_sell'])
-
-        self.model.z_ch_ev = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=previous_values['z_ch_ev'])
-        self.model.z_dis_ch_ev = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=previous_values['z_dis_ch_ev'])
+        self.model.z_ch_ev = pyo.Var(self.model.time_index_p, domain=lambda m, t: pyo.Binary if t in m.time_index_bin else pyo.UnitInterval, initialize=previous_values["z_ch_ev"])
+        self.model.z_dis_ch_ev = pyo.Var(self.model.time_index_p, domain=lambda m, t: pyo.Binary if t in m.time_index_bin else pyo.UnitInterval, initialize=previous_values["z_dis_ch_ev"])
 
         self.model.con_exclusive_dis_and_ch_ev = pyo.Constraint(
             self.model.time_index_p, rule=lambda m, t:
@@ -217,7 +220,7 @@ class PortfolioOptimizationProblem:
         self.model.p_ch = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.p_bat_use = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.p_bat_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        self.model.z_ch_batt = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
+        self.model.z_ch_batt = pyo.Var(self.model.time_index_p, domain=lambda m, t: pyo.Binary if t in m.time_index_bin else pyo.UnitInterval)
         self.model.soc = pyo.Var(self.model.time_index_soc, within=pyo.NonNegativeReals, initialize=self.model.init_soc)
 
         # When charging you lose depending on your charge efficiency
@@ -341,9 +344,9 @@ class PortfolioOptimizationProblem:
         self.model.Q_to_buffer = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.Q_to_house = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.p_hp = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        self.model.z_on_sh = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
-        self.model.z_on_dhw = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
-        self.model.z_element_on = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
+        self.model.z_on_sh = pyo.Var(self.model.time_index_p, domain=lambda m, t: pyo.Binary if t in m.time_index_bin else pyo.UnitInterval)
+        self.model.z_on_dhw = pyo.Var(self.model.time_index_p, domain=lambda m, t: pyo.Binary if t in m.time_index_bin else pyo.UnitInterval)
+        self.model.z_element_on = pyo.Var(self.model.time_index_p, domain=lambda m, t: pyo.Binary if t in m.time_index_bin else pyo.UnitInterval)
 
         # Temperatures
         self.model.T_dhw = pyo.Var(self.model.time_index_soc, within=pyo.NonNegativeReals,
@@ -551,7 +554,7 @@ class PortfolioOptimizationProblem:
         self.model.Q_to_house = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.p_hhp = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.v_gass_m3 = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        self.model.z_on = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
+        self.model.z_on = pyo.Var(self.model.time_index_p, domain=lambda m, t: pyo.Binary if t in m.time_index_bin else pyo.UnitInterval)
 
         # Temperatures
         self.model.T_buffer = pyo.Var(self.model.time_index_soc, within=pyo.NonNegativeReals, initialize=self.model.T_buffer_0)
@@ -663,7 +666,7 @@ class PortfolioOptimizationProblem:
         self.model.e_buy = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         # self.model.e_sell_no_ev = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
         self.model.e_sell = pyo.Var(self.model.time_index_p, within=pyo.NonNegativeReals, initialize=0)
-        self.model.z_buy = pyo.Var(self.model.time_index_p, within=pyo.Binary, initialize=0)
+        self.model.z_buy = pyo.Var(self.model.time_index_p, domain=lambda m, t: pyo.Binary if t in m.time_index_bin else pyo.UnitInterval)
 
         capacity = 17.0  # TODO: remove magic number
         self.model.con_energy_buy_ub = pyo.Constraint(
