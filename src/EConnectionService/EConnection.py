@@ -414,7 +414,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
                 dhw_temperature = get_single_param_with_name(param_dict, "dhw_temperature")
                 dhw_temperature = round(dhw_temperature, self.round_decimals)
 
-                dhw_profile_slice = self._get_hot_water_demand_slice(simulation_time, heat_pump)
+                dhw_profile_slice = self._get_hot_water_demand_slice(simulation_time, heat_pump, esdl_id)
 
                 problem.create_heat_pump(heat_pump,
                                          dhw_temperature,
@@ -427,7 +427,7 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
             else:
                 hybrid_heat_pump = asset_portfolio['HybridHeatPump']['esdl_object']
-                dhw_profile_slice = self._get_hot_water_demand_slice(simulation_time, hybrid_heat_pump)
+                dhw_profile_slice = self._get_hot_water_demand_slice(simulation_time, hybrid_heat_pump, esdl_id)
                 problem.create_hybrid_heat_pump(hybrid_heat_pump,
                                                 buffer_temperature,
                                                 house_temperatures,
@@ -483,13 +483,14 @@ class CalculationServiceEConnection(HelicsSimulationExecutor):
 
         return problem
 
-    def _get_hot_water_demand_slice(self, simulation_time, heat_pump : HybridHeatPump | HeatPump):
+    def _get_hot_water_demand_slice(self, simulation_time, heat_pump : HybridHeatPump | HeatPump, esdl_id : EsdlId):
         profile = self.hw_heating_demand_profiles.get(heat_pump.id, None)
         if profile is None:
             raise ValueError(f'No hot water demand profile found for HeatPump {heat_pump.id}')
         from_date = simulation_time
         to_date = simulation_time + timedelta(seconds=self.ems_time_step_seconds * self.optimization_horizon)
         dhw_profile_slice = profile.get_data_in_timeseries_format(from_date, to_date, self.ems_time_step_seconds)
+        self.influx_connector.set_time_step_data_point(esdl_id, "dhw_demand", simulation_time, dhw_profile_slice[0])
 
         return dhw_profile_slice
 

@@ -294,7 +294,7 @@ class PortfolioOptimizationProblem:
         conductance_matrix_amb = np.array([[k_vent, k_floor], [k_cond, 0]])
 
         # Convert L/s for dhw profile to power using the heat capacity of water and the temperature difference
-        heat_capacity_water = 4183/3.6e6
+        heat_capacity_water = 4183/1000 * float(pyo.value(self.model.dt))
         dhw_heat_profile = np.array(dhw_profile) * heat_capacity_water * (heat_pump_params.dhw_temp_set - heat_pump_params.dhw_temp_tap)
         dhw_heat_profile_dict = self.it2dict(dhw_heat_profile)
 
