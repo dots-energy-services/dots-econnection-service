@@ -27,7 +27,7 @@ class PortfolioOptimizationProblem:
         self.has_ev = False
 
     def create_time(self, time_params: dict):
-        amount_of_binary_time_steps = 6
+        amount_of_binary_time_steps = 4
         self.model.time_index_p = pyo.RangeSet(0, time_params['n_steps'] - 1)
         self.model.time_index_p1 = pyo.RangeSet(0, 0)
         self.model.time_index_soc = pyo.RangeSet(0, time_params['n_steps'])
