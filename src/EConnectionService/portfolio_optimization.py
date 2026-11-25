@@ -317,7 +317,7 @@ class PortfolioOptimizationProblem:
         self.model.C_dhw = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.dhw_capacitance_kwh)
         self.model.C_buffer = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.buffer_capacitance_kwh)
         self.model.T_dhw_min = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.dhw_temp_min)
-        self.model.T_dhw_max = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.buffer_temp_max)
+        self.model.T_dhw_max = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.dhw_temp_max)
         self.model.T_dhw_hor = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.dhw_temp_hor)
         self.model.T_buffer_min = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.buffer_temp_min)
         self.model.T_buffer_max = pyo.Param(within=pyo.NonNegativeReals, initialize=heat_pump_params.buffer_temp_max)
